@@ -168,7 +168,7 @@ test('a lock left by a killed first run is broken instead of making every start 
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-// VM219 2026-10-20: right after the owner claim several OpenCode starts overlap in the CLI container and the catalog answers 503.
+// Windows lab, 2026-10-20: right after the owner claim several OpenCode starts overlap in the CLI container and the catalog answers 503.
 test('the catalog call is retried after a 503 from overlapping starts, then the selection goes on as before',async()=>{
  const listings=[];
  const selected=await selectWorkingFreeModel({executeNative:async(args,env,cwd)=>{

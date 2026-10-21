@@ -93,7 +93,7 @@ const SELECTION_BUDGET_MS=100000;
 // OpenCode runs here with a throwaway home: never the owner's keys or configuration.
 const isolatedEnvironment=(env,directory)=>({PATH:env.PATH,LANG:env.LANG,USER:env.USER,OPENCODE_DISABLE_AUTOUPDATE:'true',HOME:directory,XDG_CONFIG_HOME:join(directory,'config'),XDG_DATA_HOME:join(directory,'data'),XDG_CACHE_HOME:join(directory,'cache'),XDG_STATE_HOME:join(directory,'state')});
 // The free models in the native catalog, or null when the catalog cannot be read. Overlapping OpenCode starts after the
-// owner claim answer 503 (VM219 2026-10-20): up to `attempts` tries, 3 s apart; never a 4xx.
+// owner claim answer 503 (Windows lab, 2026-10-20): up to `attempts` tries, 3 s apart; never a 4xx.
 async function listFreeModels(isolated,directory,executeNative,deadline,attempts=3,timeout=20000){
   let listed;
   // --standalone everywhere: without it OpenCode 2 starts its per-user background service.
