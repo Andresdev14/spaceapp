@@ -31,6 +31,10 @@ Semantic Versioning.
 
 ### OpenCode
 
+- The onboarding guide names the model record's exact path
+  (`/var/lib/spaceapp/memory/installation-model.json`), so the assistant no longer searches `/var/lib/spaceapp` and stops
+  at OpenCode's "Access external directory" prompt.
+
 - The free model the first run saved is checked once a day; when OpenCode Zen retires it, the next free model that
   passes the tool-call check replaces it. A model the owner chose is never replaced.
 

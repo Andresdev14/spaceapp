@@ -107,6 +107,15 @@ test('the unchanged 1.1.x default is upgraded once; the result is stable',()=>{
  const owned={external_directory:{...earlier.external_directory,'/srv/*':'allow'}};
  assert.deepEqual(withBootstrap({permission:owned},{tmpdir:PROVIDER_TMP}).permission,owned);
 });
+// 1.1.7 rc2 VM221: the model searched /var/lib/spaceapp for its model record and stopped at OpenCode's "Access external
+// directory" prompt; the instructions name the exact file instead.
+test('bootstrap instructions name the model record by its exact path, never a search of /var/lib/spaceapp',()=>{
+ for(const file of ['starter-memory/AGENTS.md','starter-memory/installation-guide.md']){
+  const text=readFileSync(join(import.meta.dirname,'../..',file),'utf8');
+  assert.match(text,/`\/var\/lib\/spaceapp\/memory\/installation-model\.json`/,file);
+  assert.match(text,/search(ing)?\s+`\/var\/lib\/spaceapp`/,file);
+ }
+});
 test('bootstrap instructions send temporary files to TMPDIR instead of /tmp',()=>{
  for(const file of ['starter-memory/AGENTS.md','starter-memory/installation-guide.md']){
   const text=readFileSync(join(import.meta.dirname,'../..',file),'utf8');
