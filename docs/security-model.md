@@ -1,8 +1,14 @@
 # SpaceApp security model
 
 SpaceApp's security boundary is one trusted owner operating one
-self-hosted instance. It does not provide tenant isolation, team roles, or a
-SaaS control plane.
+self-hosted instance. It does not provide tenant isolation or a SaaS control
+plane. The owner may give other people team accounts (off by default, `user
+enable`): each user's CLIs run in a CLI container and network of their own, with
+their own keys, logins, Space Memory and workspaces; a user sees only their own
+rooms and the rooms shared with them (View or Collaborate), and only a pane's
+owner types into it, others attach as observers. Users are trusted people the
+owner invited, not isolated tenants: the owner administers the host and every
+account.
 
 ## Trust boundaries
 
@@ -38,8 +44,11 @@ SaaS control plane.
   from masked standard input and written to restrictive local secret files;
   they are not passed in command arguments, logs, or application database rows.
 - Only the CLI service mounts imported provider keys and provider state. The
-  application core mounts neither and communicates with CLI runtimes through a
-  protected Unix socket.
+  application core mounts no provider keys and communicates with CLI runtimes
+  through a protected Unix socket. The one exception (1.1.7) is read-only
+  access to Codex's session logs, a volume of their own, so the room monitor
+  can follow a Codex pane's turns; those logs hold full Codex conversations,
+  never the Codex home or its credentials.
 - Portable backups intentionally exclude provider API-key files, provider
   login state, registered host workspace contents, and browser profiles.
 - Host workspaces are not mounted until the owner runs
