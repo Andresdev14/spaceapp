@@ -5,6 +5,18 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+### Backup and restore
+
+- A restore that fails without changing anything, or that puts every database and file back, starts SpaceApp again with its
+  data from before the restore and names the pre-restore backup (1.1.7 left it stopped). A restore that cannot be fully
+  undone keeps SpaceApp stopped and says how to go on.
+- A backup with workflow history is refused before any change on an installation without Temporal (profile small), with
+  the command to install a profile that has it.
+
+### Licence
+
+- The LICENSE files use ASCII quotes, so they match the standard MIT text byte for byte.
+
 ## [1.1.7] - 2026-10-21
 
 Source: sanitized Space app @ 3e4572bc97 (4729 files: SpaceApp 77d00f6895 with

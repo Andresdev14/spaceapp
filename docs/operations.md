@@ -75,6 +75,12 @@ The launcher:
    that are not registered on this host, with the `workspace add` command for
    each.
 
+If the restore fails before it changed anything, or a database or the file swap fails and every database and file is put
+back, the launcher starts SpaceApp again with its data from before the restore and says so. A backup with workflow history
+(Temporal) is refused before any change on an installation without Temporal (profile small); install the medium or large
+profile first. If putting a database back fails too, SpaceApp stays stopped: the output names each database left at the
+backup's state and the command that puts it back, and the pre-restore backup keeps the earlier data.
+
 Restore is destructive to current application data. Make an offline copy of
 the installation's `backups` directory before a disaster-recovery exercise.
 Provider login state is not restored; reconnect providers when moving to a new

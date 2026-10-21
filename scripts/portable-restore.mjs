@@ -20,6 +20,11 @@ const stagingName = ".spaceapp-restore-staging";
 const rollbackName = ".spaceapp-restore-rollback";
 const previousName = ".spaceapp-restore-previous";
 const restoreArgs = ["--clean", "--if-exists", "--no-owner", "--no-acl", "--single-transaction", "--exit-on-error"];
+// Exit code of a restore that changed nothing or put everything back: the launcher may start SpaceApp again (1.1.8).
+export const RESTORE_UNCHANGED_EXIT = 3;
+
+/** A restore failure after which the installation is exactly as it was before the restore. */
+export class RestoreUnchangedError extends Error {}
 
 export async function selectLatestBackup(root) {
   const entries = await readdir(root, { withFileTypes: true });
@@ -88,7 +93,18 @@ export async function validateBackupManifest(backupDirectory) {
   return manifest;
 }
 
-export async function restorePortableBackup({
+export async function restorePortableBackup(options = {}) {
+  const state = { changed: false };
+  try {
+    return await restoreBackup(options, state);
+  } catch (error) {
+    // Anything that fails before the first database is restored leaves the installation untouched.
+    if (state.changed || error instanceof RestoreUnchangedError) throw error;
+    throw new RestoreUnchangedError(`${error instanceof Error ? error.message : String(error)} Nothing was changed.`);
+  }
+}
+
+async function restoreBackup({
   env = process.env,
   stdout = process.stdout,
   inputRoot = "/backups",
@@ -96,7 +112,7 @@ export async function restorePortableBackup({
   confirmation = "",
   dataRoot = "/var/lib/spaceapp",
   memoryRoot = "/var/lib/spaceapp/memory"
-} = {}) {
+} = {}, state = { changed: false }) {
   if (confirmation !== "RESTORE") {
     throw new Error("Portable restore requires explicit RESTORE confirmation.");
   }
@@ -141,6 +157,16 @@ export async function restorePortableBackup({
       `--command=SELECT datname FROM pg_database WHERE datname IN (${temporalDatabases.map((name) => `'${name}'`).join(", ")}) ORDER BY datname`,
       ...database.args
     ], { env: postgresEnv(database.databaseName), capture: true })).split(/\r?\n/).filter((name) => temporalDatabases.includes(name))]);
+    // Every database of the backup must exist here before anything changes: a backup with workflow history (Temporal) on an
+    // installation without Temporal (profile small) is refused with the way forward (1.1.7 review, Claude F2).
+    const absent = restores.map(([databaseName]) => databaseName).filter((databaseName) => !present.has(databaseName));
+    if (absent.length) {
+      throw new RestoreUnchangedError([
+        `This backup holds workflow history (${absent.join(", ")}) that this installation has no database for: it runs without`,
+        "workflows (profile small). Nothing was changed. Install the medium or large profile, for example",
+        "'npx --yes run-spaceapp@latest install --profile medium', and run the restore again."
+      ].join("\n"));
+    }
     await rm(rollbackDirectory, { recursive: true, force: true });
     await mkdir(rollbackDirectory, { mode: 0o700 });
     for (const [databaseName] of restores) {
@@ -154,6 +180,7 @@ export async function restorePortableBackup({
       ], { env: postgresEnv(databaseName) });
     }
 
+    state.changed = true;
     try {
       for (const [databaseName, dump] of restores) {
         await runCommand("pg_restore", [...restoreArgs, `--dbname=${databaseName}`, join(backupDirectory, dump)], { env: postgresEnv(databaseName) });
@@ -174,7 +201,7 @@ export async function restorePortableBackup({
       }
       const reason = error instanceof Error ? error.message : String(error);
       if (!stillRestored.length && !fileProblem) {
-        throw new Error(`Restore failed (${reason}). Every database and file was put back as it was before the restore.`);
+        throw new RestoreUnchangedError(`Restore failed (${reason}). Every database and file was put back as it was before the restore.`);
       }
       keepRollback = true;
       const steps = stillRestored.map((databaseName) => present.has(databaseName)
@@ -273,6 +300,6 @@ if (isMain) {
     await restorePortableBackup(parseArguments(process.argv.slice(2)));
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : "Portable restore failed."}\n`);
-    process.exitCode = 1;
+    process.exitCode = error instanceof RestoreUnchangedError ? RESTORE_UNCHANGED_EXIT : 1;
   }
 }
