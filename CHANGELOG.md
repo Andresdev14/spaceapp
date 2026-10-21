@@ -18,6 +18,11 @@ Semantic Versioning.
 - `backup` gives up after two minutes of waiting for a database lock instead of keeping the paused installation frozen;
   the writers resume and the backup reports the failure.
 
+### Databases
+
+- The core image carries Python with its sqlite3 module, so the Databases tool's SQLite connections work in public
+  installations.
+
 ### Integrity
 
 - Every runtime version an installation ran from a published package keeps its image digests (`image-digests.json`), so

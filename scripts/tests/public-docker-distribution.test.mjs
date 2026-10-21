@@ -232,6 +232,14 @@ test("an OpenCode pane still starts when the first-run free-model check fails; c
   assert.match(wrapper, /^set -euo pipefail$/m);
 });
 
+test("the core image carries the Python the SQLite worker needs (1.1.8)", async () => {
+  const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
+  const stages = Object.fromEntries(dockerfile.split(/^(?=FROM )/m).map((stage) => [stage.match(/^FROM \S+ AS (\S+)/)?.[1], stage]));
+  assert.match(stages.core, /apt-get install -y --no-install-recommends python3\s+&& rm -rf \/var\/lib\/apt\/lists\/\*/);
+  assert.match(stages.core, /import sqlite3, sys; assert sys\.version_info >= \(3, 12\)/);
+  assert.ok((await readFile(join(root, "apps", "api", "src", "databases", "sqlite-adapter.ts"), "utf8")).includes("python3"));
+});
+
 test("core never runs OpenCode itself", async () => {
   // 1.1.7 (decision B): CLIs live only in the CLI container; core asks its credential agent instead.
   const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");

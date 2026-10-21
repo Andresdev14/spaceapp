@@ -74,6 +74,12 @@ RUN chmod 0755 deploy/docker/core-entrypoint.sh deploy/docker/browser-entrypoint
 
 FROM runtime-base AS core
 COPY --chown=spaceapp:spaceapp starter-memory /opt/spaceapp/starter-memory
+# The Databases tool's SQLite worker (apps/api/src/databases/sqlite-worker.py) needs Python 3.12+ with its sqlite3 module;
+# python3-minimal has no sqlite3 (1.1.7 review: SQLite could not run in public installations).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -c 'import sqlite3, sys; assert sys.version_info >= (3, 12)'
 RUN install -d -o spaceapp -g spaceapp -m 0700 \
       /var/lib/spaceapp \
       /var/lib/spaceapp/artifacts \
