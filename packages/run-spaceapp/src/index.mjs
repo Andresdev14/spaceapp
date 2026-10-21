@@ -810,7 +810,8 @@ export function composeCommand(action, root, options = {}) {
     syncWorkspaces: ["up", "-d", "spaceapp-core", "spaceapp-cli"],
     // The CLIs' own settings (MCP servers, base URLs), never their logins: these files hold no credentials.
     exportCliSettings: ["exec", "-T", "--user", "10001:10001", options.service ?? "spaceapp-cli", "sh", "-c",
-      `cd /var/lib/spaceapp-cli/providers && tar -czf - $(ls -d ${CLI_SETTINGS_FILES.join(" ")} 2>/dev/null)`],
+      // No settings file yet (a fresh install): exit 3 without tar's "Cowardly refusing to create an empty archive" (1.1.8).
+      `cd /var/lib/spaceapp-cli/providers && files=$(ls -d ${CLI_SETTINGS_FILES.join(" ")} 2>/dev/null); [ -n "$files" ] || exit 3; tar -czf - $files`],
     importCliSettings: ["exec", "-T", "--user", "10001:10001", options.service ?? "spaceapp-cli", "tar", "-C", "/var/lib/spaceapp-cli/providers", "-xzf", "-"],
     // The CLI host answers on its socket (a user's container is ready only then, not when Docker starts it).
     cliHostReady: ["exec", "-T", "--user", "10001:10001", options.service ?? "spaceapp-cli", "node", "-e",

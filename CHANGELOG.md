@@ -13,6 +13,8 @@ Semantic Versioning.
 - A backup with workflow history is refused before any change on an installation without Temporal (profile small), with
   the command to install a profile that has it.
 
+- `backup` on an installation without CLI settings no longer prints tar's "Cowardly refusing to create an empty
+  archive" before its own note.
 - `backup` gives up after two minutes of waiting for a database lock instead of keeping the paused installation frozen;
   the writers resume and the backup reports the failure.
 
