@@ -13,6 +13,14 @@ Semantic Versioning.
 - A backup with workflow history is refused before any change on an installation without Temporal (profile small), with
   the command to install a profile that has it.
 
+- `backup` gives up after two minutes of waiting for a database lock instead of keeping the paused installation frozen;
+  the writers resume and the backup reports the failure.
+
+### OpenCode
+
+- The free model the first run saved is checked once a day; when OpenCode Zen retires it, the next free model that
+  passes the tool-call check replaces it. A model the owner chose is never replaced.
+
 ### Licence
 
 - The LICENSE files use ASCII quotes, so they match the standard MIT text byte for byte.

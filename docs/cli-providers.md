@@ -20,8 +20,11 @@ is not in that list or fails the check, SpaceApp tries the other free models,
 newest first, up to five checks within a 100-second budget, and saves the first
 one that passes as OpenCode's default model. The check needs internet access.
 If no model passes, SpaceApp stays usable; retry OpenCode later or choose
-another provider in Settings. A model you have already configured is never
-replaced. The list of free models comes from OpenCode's live catalog and can
+another provider in Settings. A model you chose yourself is never replaced.
+The model the first run saved is checked against the catalog at most once a
+day when OpenCode starts; if OpenCode Zen no longer offers it for free,
+SpaceApp checks the free models again the same way and saves the first one that
+passes. The list of free models comes from OpenCode's live catalog and can
 change.
 
 | Runtime | Package and pinned version | Normal owner setup |

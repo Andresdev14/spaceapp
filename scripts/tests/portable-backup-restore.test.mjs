@@ -223,7 +223,7 @@ test("backup dumps the Temporal databases that exist next to the app database", 
     await writeFile(join(dataRoot, leftover, "x"), "x");
   }
   await writeFile(join(shims, "psql"), "#!/bin/sh\nprintf 'temporal\\ntemporal_visibility\\n'\n");
-  await writeFile(join(shims, "pg_dump"), "#!/bin/sh\nfor arg; do case $arg in --file=*) echo \"$PGDATABASE\" > \"${arg#--file=}\";; esac; done\n");
+  await writeFile(join(shims, "pg_dump"), `#!/bin/sh\necho "$PGDATABASE $*" >> ${join(work, "pg_dump.log")}\nfor arg; do case $arg in --file=*) echo "$PGDATABASE" > "\${arg#--file=}";; esac; done\n`);
   await chmod(join(shims, "psql"), 0o755);
   await chmod(join(shims, "pg_dump"), 0o755);
   const target = await createPortableBackup({
@@ -242,4 +242,8 @@ test("backup dumps the Temporal databases that exist next to the app database", 
   const archived = execFileSync("tar", ["--list", "--gzip", `--file=${join(target, "data.tar.gz")}`], { encoding: "utf8" });
   assert.match(archived, /settings\.json/);
   assert.doesNotMatch(archived, /spaceapp-restore-/);
+  // Every dump gives up on a lock it cannot get instead of freezing the paused installation (1.1.8).
+  const dumps = (await readFile(join(work, "pg_dump.log"), "utf8")).trim().split("\n");
+  assert.equal(dumps.length, 3);
+  for (const dump of dumps) assert.match(dump, /--lock-wait-timeout=120000/);
 });
