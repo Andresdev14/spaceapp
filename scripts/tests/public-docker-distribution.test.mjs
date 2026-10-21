@@ -235,7 +235,8 @@ test("an OpenCode pane still starts when the first-run free-model check fails; c
 test("the core image carries the Python the SQLite worker needs (1.1.8)", async () => {
   const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
   const stages = Object.fromEntries(dockerfile.split(/^(?=FROM )/m).map((stage) => [stage.match(/^FROM \S+ AS (\S+)/)?.[1], stage]));
-  assert.match(stages.core, /apt-get install -y --no-install-recommends python3\s+&& rm -rf \/var\/lib\/apt\/lists\/\*/);
+  const core = stages.core.replace(/\\\n/g, " ");
+  assert.match(core, /apt-get install -y --no-install-recommends python3\s+&& rm -rf \/var\/lib\/apt\/lists\/\*/);
   assert.match(stages.core, /import sqlite3, sys; assert sys\.version_info >= \(3, 12\)/);
   assert.ok((await readFile(join(root, "apps", "api", "src", "databases", "sqlite-adapter.ts"), "utf8")).includes("python3"));
 });
