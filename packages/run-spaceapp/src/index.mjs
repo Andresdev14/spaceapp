@@ -18,7 +18,7 @@ import {
   stripTrailingLineEndings
 } from "./string-utils.mjs";
 import { UNIVERSAL_COMMAND } from "./package-info.mjs";
-import { imageDigestEnv, PACKAGE_IMAGE_LOCK } from "./image-lock.mjs";
+import { imageDigestEnv, PACKAGE_IMAGE_LOCK, parseRecordedDigests } from "./image-lock.mjs";
 
 const CONFIG_SCHEMA_VERSION = 4;
 const CONTAINER_SECRET_MODE = 0o644;
@@ -625,12 +625,12 @@ export async function writeSetupToken(root, token) {
   return target;
 }
 
-export function renderRuntimeEnv(config, imageLock = PACKAGE_IMAGE_LOCK) {
+export function renderRuntimeEnv(config, imageLock = PACKAGE_IMAGE_LOCK, recordedDigests = {}) {
   validateConfig(config);
   const settings = PROFILE_RUNTIME_SETTINGS[config.profile];
   return [
     `SPACEAPP_IMAGE_TAG=${safeEnv(config.version)}`,
-    ...imageDigestEnv(config.version, imageLock),
+    ...imageDigestEnv(config.version, imageLock, recordedDigests),
     `SPACEAPP_BIND_HOST=${safeEnv(config.bindHost)}`,
     `SPACEAPP_PORT=${config.port}`,
     `SPACEAPP_TELEMETRY=${config.telemetry}`,
@@ -940,12 +940,23 @@ async function ensureOwnerOnlySecrets(root) {
   if (info && (info.mode & 0o077) !== 0) await chmod(secrets, 0o700);
 }
 
-export async function writeRuntimeFiles(root, config) {
+/** The image digests this installation recorded per runtime version (image-digests.json). */
+export async function readRecordedDigests(root) {
+  return parseRecordedDigests(await readFile(join(root, "image-digests.json"), "utf8").catch(() => "{}"));
+}
+
+export async function writeRuntimeFiles(root, config, imageLock = PACKAGE_IMAGE_LOCK) {
   validateHome(root);
   validateConfig(config);
   await mkdir(root, { recursive: true, mode: 0o700 });
   await ensureOwnerOnlySecrets(root);
-  await atomicWrite(join(root, "runtime.env"), renderRuntimeEnv(config));
+  // Each runtime version a locked package installs keeps its digests, for a later rollback to it.
+  const recorded = await readRecordedDigests(root);
+  if (imageLock && imageLock.runtimeVersion === config.version && JSON.stringify(recorded[config.version]) !== JSON.stringify(imageLock.images)) {
+    recorded[config.version] = { ...imageLock.images };
+    await atomicWrite(join(root, "image-digests.json"), `${JSON.stringify(recorded, null, 2)}\n`, 0o644);
+  }
+  await atomicWrite(join(root, "runtime.env"), renderRuntimeEnv(config, imageLock, recorded));
   await atomicWrite(join(root, "compose.workspaces.yml"), renderWorkspaceCompose(config, { cliSandbox: await userNamespacesUsable() }));
   // The core reads it as uid 10001 through a read-only bind mount.
   await atomicWrite(join(root, "cli-hosts.json"), renderCliHosts(config), 0o644);

@@ -18,6 +18,12 @@ Semantic Versioning.
 - `backup` gives up after two minutes of waiting for a database lock instead of keeping the paused installation frozen;
   the writers resume and the backup reports the failure.
 
+### Integrity
+
+- Every runtime version an installation ran from a published package keeps its image digests (`image-digests.json`), so
+  `rollback` pulls the previous version's images by digest too; a version installed before digest pinning is pulled by
+  version tag, and the rollback plan says which.
+
 ### OpenCode
 
 - The free model the first run saved is checked once a day; when OpenCode Zen retires it, the next free model that

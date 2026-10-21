@@ -38,6 +38,7 @@ import {
   resolveInstallProfile,
   resolveSpaceAppHome,
   saveConfig,
+  readRecordedDigests,
   selectLatestBackupId,
   SPACEAPP_UPGRADE_POLICY,
   upgradePath,
@@ -64,6 +65,7 @@ import {
   installFunnelFacts,
   isInstallPingAllowed
 } from "./telemetry.mjs";
+import { PACKAGE_IMAGE_LOCK } from "./image-lock.mjs";
 // scripts/portable-restore.mjs (in the core image) exits with this code when a restore changed nothing or put everything back.
 export const RESTORE_UNCHANGED_EXIT = 3;
 
@@ -499,9 +501,14 @@ export async function run(argv, {
     if (!config.previousVersion) {
       throw new Error("No previous SpaceApp version is recorded.");
     }
+    // Pinned when this installation recorded the previous version's digests; otherwise said before the owner agrees.
+    const pinned = PACKAGE_IMAGE_LOCK?.runtimeVersion === config.previousVersion || Boolean((await readRecordedDigests(root))[config.previousVersion]);
     const approved = await requireChangeApproval(stdin, stdout, stderr, [
       `Runtime image version: ${config.version} -> ${config.previousVersion}`,
-      "Rollback restores the previously recorded runtime images and configuration."
+      "Rollback restores the previously recorded runtime images and configuration.",
+      pinned
+        ? `The ${config.previousVersion} images are pulled by the digests recorded when it was installed.`
+        : `No digests were recorded for ${config.previousVersion} (installed before digest pinning): its images are pulled by version tag.`
     ]);
     if (!approved) {
       return 0;
