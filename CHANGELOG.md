@@ -12,6 +12,8 @@ Semantic Versioning.
   undone keeps SpaceApp stopped and says how to go on.
 - A backup with workflow history is refused before any change on an installation without Temporal (profile small), with
   the command to install a profile that has it.
+- A backup made by an older SpaceApp restores into a newer installation: each database is restored into an emptied
+  schema, so tables the newer version added that reference the backup's tables no longer stop the restore.
 
 - `backup` on an installation without CLI settings no longer prints tar's "Cowardly refusing to create an empty
   archive" before its own note.

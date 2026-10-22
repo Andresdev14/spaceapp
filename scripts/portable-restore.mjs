@@ -19,7 +19,16 @@ const stagingName = ".spaceapp-restore-staging";
 // The databases as they were before the restore, and the files the restore replaced, kept until it has finished.
 const rollbackName = ".spaceapp-restore-rollback";
 const previousName = ".spaceapp-restore-previous";
-const restoreArgs = ["--clean", "--if-exists", "--no-owner", "--no-acl", "--single-transaction", "--exit-on-error"];
+const restoreArgs = ["--no-owner", "--no-acl", "--single-transaction", "--exit-on-error"];
+// Each database is restored into an emptied public schema instead of pg_restore --clean: tables a newer SpaceApp added that
+// reference tables in the dump no longer block their drop, so a backup made by an older version restores (1.1.7 review,
+// Claude F6). The pre-restore copy covers a restore that fails after the schema was emptied.
+const emptySchemaSql = "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;";
+const emptySchemaArgs = (databaseName) => ["--no-psqlrc", "--quiet", "--set=ON_ERROR_STOP=1", `--dbname=${databaseName}`, `--command=${emptySchemaSql}`];
+async function restoreDatabase(databaseName, dump, env) {
+  await runCommand("psql", emptySchemaArgs(databaseName), { env });
+  await runCommand("pg_restore", [...restoreArgs, `--dbname=${databaseName}`, dump], { env });
+}
 // Exit code of a restore that changed nothing or put everything back: the launcher may start SpaceApp again (1.1.8).
 export const RESTORE_UNCHANGED_EXIT = 3;
 
@@ -183,7 +192,7 @@ async function restoreBackup({
     state.changed = true;
     try {
       for (const [databaseName, dump] of restores) {
-        await runCommand("pg_restore", [...restoreArgs, `--dbname=${databaseName}`, join(backupDirectory, dump)], { env: postgresEnv(databaseName) });
+        await restoreDatabase(databaseName, join(backupDirectory, dump), postgresEnv(databaseName));
         restored.push(databaseName);
       }
       swapped = { data: await swapEntries(dataRoot, dataStaging, new Set(["memory", stagingName, rollbackName, ...hostSecretEntries])) };
@@ -194,7 +203,7 @@ async function restoreBackup({
       for (const databaseName of [...restored].reverse()) {
         if (!present.has(databaseName)) { stillRestored.push(databaseName); continue; }
         try {
-          await runCommand("pg_restore", [...restoreArgs, `--dbname=${databaseName}`, join(rollbackDirectory, `${databaseName}.dump`)], { env: postgresEnv(databaseName) });
+          await restoreDatabase(databaseName, join(rollbackDirectory, `${databaseName}.dump`), postgresEnv(databaseName));
         } catch {
           stillRestored.push(databaseName);
         }
@@ -205,7 +214,7 @@ async function restoreBackup({
       }
       keepRollback = true;
       const steps = stillRestored.map((databaseName) => present.has(databaseName)
-        ? `pg_restore ${restoreArgs.join(" ")} --dbname=${databaseName} ${join(rollbackDirectory, `${databaseName}.dump`)}`
+        ? `psql --dbname=${databaseName} --command="${emptySchemaSql}" && pg_restore ${restoreArgs.join(" ")} --dbname=${databaseName} ${join(rollbackDirectory, `${databaseName}.dump`)}`
         : `(no copy: ${databaseName} did not exist before the restore)`);
       throw new Error([
         `Restore failed (${reason}) and could not be fully undone.`,

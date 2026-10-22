@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmod, mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import {
   createBackupId,
@@ -117,7 +117,8 @@ async function restoreFixture() {
   const shims = join(work, "bin");
   await mkdir(shims);
   const log = join(work, "pg_restore.log");
-  await writeFile(join(shims, "psql"), "#!/bin/sh\n[ -n \"$NO_TEMPORAL\" ] || printf 'temporal\\n'\n");
+  // psql logs its calls; the listing query prints the Temporal database unless NO_TEMPORAL.
+  await writeFile(join(shims, "psql"), `#!/bin/sh\necho "$*" >> ${join(work, "psql.log")}\ncase "$*" in *pg_database*) [ -n "$NO_TEMPORAL" ] || printf 'temporal\\n';; esac\n`);
   await writeFile(join(shims, "pg_dump"), "#!/bin/sh\nfor arg; do case $arg in --file=*) echo \"$PGDATABASE before\" > \"${arg#--file=}\";; esac; done\n");
   await writeFile(join(shims, "pg_restore"), [
     "#!/bin/sh",
@@ -158,6 +159,10 @@ test("restore swaps the files in only after every database restored", async () =
   assert.match(log, /spaceapp .*--single-transaction.*database\.dump/);
   assert.match(log, /temporal .*--dbname=temporal .*temporal\.dump/);
   assert.doesNotMatch(log, /spaceapp-restore-rollback/);
+  // Each database is emptied before its restore, never restored with --clean (cross-version restores, 1.1.8).
+  assert.doesNotMatch(log, /--clean/);
+  const psql = await readFile(join(dirname(ok.dataRoot), "psql.log"), "utf8");
+  for (const db of ["spaceapp", "temporal"]) assert.match(psql, new RegExp(`--dbname=${db} --command=DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;`));
 });
 
 test("a database that fails after another restored puts every database back as it was (1.1.7 review)", async () => {
@@ -183,7 +188,7 @@ test("a rollback that fails keeps the pre-restore copies and prints how to put t
   assert.ok(!(error instanceof RestoreUnchangedError));
   assert.match(error.message, /spaceapp is at the backup's state/);
   assert.match(error.message, /run the same restore again/);
-  assert.match(error.message, /pg_restore --clean --if-exists --no-owner --no-acl --single-transaction --exit-on-error --dbname=spaceapp .*\.spaceapp-restore-rollback\/spaceapp\.dump/);
+  assert.match(error.message, /psql --dbname=spaceapp --command="DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;" && pg_restore --no-owner --no-acl --single-transaction --exit-on-error --dbname=spaceapp .*\.spaceapp-restore-rollback\/spaceapp\.dump/);
   assert.deepEqual((await readdir(join(failed.dataRoot, ".spaceapp-restore-rollback"))).sort(), ["spaceapp.dump", "temporal.dump"]);
   assert.deepEqual((await readdir(failed.dataRoot)).sort(), [".spaceapp-restore-rollback", "current.txt", "memory"]);
 });
