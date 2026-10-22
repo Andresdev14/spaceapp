@@ -28,7 +28,8 @@ account.
   pulls `name:version@sha256:…`, so a moved tag cannot change what an install
   runs; older packages pull by exact version tag. Third-party images
   (PostgreSQL, Temporal, codex-lb, headroom) are pinned by digest in the compose
-  template.
+  template. CLIs installed on first use come from per-provider npm lockfiles
+  in the CLI image, the Cursor agent from a checksum-pinned archive.
 
 ## Default protections
 

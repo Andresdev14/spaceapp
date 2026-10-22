@@ -40,6 +40,12 @@ Semantic Versioning.
 - The free model the first run saved is checked once a day; when OpenCode Zen retires it, the next free model that
   passes the tool-call check replaces it. A model the owner chose is never replaced.
 
+### Supply chain
+
+- The CLIs installed on first use (Codex, Gemini, Qwen, Kimi, Grok, Autohand, Copilot, DeepSeek, Claude Code) install with
+  `npm ci` from a lockfile per provider in the CLI image, so every dependency is pinned with its integrity hash, not only
+  the CLI's own version. `provider install claude` uses the same lockfile.
+
 ### Licence
 
 - The LICENSE files use ASCII quotes, so they match the standard MIT text byte for byte.

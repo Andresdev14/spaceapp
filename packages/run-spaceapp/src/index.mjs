@@ -95,10 +95,12 @@ export function profileRuntimeSettings(profile) {
   return settings;
 }
 const SECRET_FIELD = /password|secret|token|api.?key|credential/i;
-// provider install claude: approve Claude Code's postinstall (its native binary) for exactly the pinned version in the vendor
-// project's package.json allowScripts, as deploy/docker/provider-install.mjs does on first use, then install with npm. $1 is the
-// package; npm 11 refuses --allow-scripts for an install with --prefix.
+// provider install claude: an image with provider lockfiles reinstalls Claude Code from its lockfile (review INT5-C-F14).
+// Older runtime images approve Claude Code's postinstall (its native binary) for exactly the pinned version in the vendor
+// project's package.json allowScripts, then install with npm. $1 is the package; npm 11 refuses --allow-scripts for an
+// install with --prefix.
 const CLAUDE_INSTALL_SCRIPT = [
+  "[ ! -f /app/deploy/docker/provider-locks/claude.json ] || exec node /app/deploy/docker/provider-install.mjs claude --reinstall; ",
   "node -e 'const fs=require(\"fs\");const dir=\"/var/lib/spaceapp-cli/vendor/claude\";const file=dir+\"/package.json\";",
   "let manifest={private:true};try{manifest=JSON.parse(fs.readFileSync(file,\"utf8\"))}catch{}",
   "manifest.allowScripts={...manifest.allowScripts,[process.argv[1]]:true};fs.mkdirSync(dir,{recursive:true});",

@@ -1647,6 +1647,7 @@ test("Claude installation is explicit, owner-initiated, and fixed to the reviewe
   // npm 11 warns about (and will block) install scripts not approved in package.json allowScripts; Claude Code's
   // postinstall puts its native binary in place, so the vendor project approves exactly the pinned version first.
   const script = calls[0].at(-3);
+  assert.match(script, /^\[ ! -f \/app\/deploy\/docker\/provider-locks\/claude\.json \] \|\| exec node \/app\/deploy\/docker\/provider-install\.mjs claude --reinstall; /);
   assert.match(script, /manifest\.allowScripts=\{\.\.\.manifest\.allowScripts,\[process\.argv\[1\]\]:true\}/);
   assert.match(script, /" && exec npm install --prefix \/var\/lib\/spaceapp-cli\/vendor\/claude --no-audit --no-fund "\$1"$/);
   assert.doesNotMatch(script, /--allow-scripts|--ignore-scripts/);
