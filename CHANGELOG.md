@@ -42,6 +42,8 @@ Semantic Versioning.
 
 ### Supply chain
 
+- zod 4.6.7 (GHSA-mrhx-c7xc-m3w5, high: validating an oversized constrained collection could exhaust memory). The
+  advisory was published after the 1.1.7 release gates; 1.1.7 and 1.1.6 ship zod 4.4.3.
 - The CLIs installed on first use (Codex, Gemini, Qwen, Kimi, Grok, Autohand, Copilot, DeepSeek, Claude Code) install with
   `npm ci` from a lockfile per provider in the CLI image, so every dependency is pinned with its integrity hash, not only
   the CLI's own version. `provider install claude` uses the same lockfile.
