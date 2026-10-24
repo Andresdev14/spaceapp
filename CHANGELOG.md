@@ -52,7 +52,10 @@ Semantic Versioning.
   workflow on `main`, read by digest. It records the release run and commit in `image-attestations.json` and stops before
   pulling when a check fails. The release workflow runs the same check, and a full release's images must come from its
   own commit. `scripts/shipped-image-evidence.mjs` confirms that the lab's installs of the published `next` package ran
-  exactly its locked images before `latest` (reviews EXT-C-F5, IR117-C-F7).
+  exactly its locked images before `latest` (reviews EXT-C-F5, IR117-C-F7). The registry reads use `HTTPS_PROXY` /
+  `NO_PROXY`, or else the Docker client's proxy in `~/.docker/config.json`; an unreachable registry stops with those
+  settings named. `SPACEAPP_IMAGE_VERIFY=off` skips the check on air-gapped or locked-down hosts, with a warning on
+  every run.
 
 ### Licence
 

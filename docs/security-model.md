@@ -32,8 +32,13 @@ account.
   about that exact image from `oll4com/spaceapp`'s release workflow on `main`,
   all read by digest from the pinned index; it records the release run and
   commit in `image-attestations.json` and stops before pulling if a check
-  fails. It reads ghcr.io directly over HTTPS, not through Docker's proxy
-  settings. Third-party images
+  fails (a failed check cannot be bypassed by a proxy setting). It reads
+  ghcr.io over HTTPS through `HTTPS_PROXY` / `NO_PROXY` when set, else the
+  Docker client's `proxies.default` in `~/.docker/config.json`; when the
+  registry cannot be reached it stops and names those settings. On an
+  air-gapped or locked-down host, `SPACEAPP_IMAGE_VERIFY=off` skips the check:
+  every launcher run then prints a warning, and the version is recorded as
+  unverified until a run without it verifies it. Third-party images
   (PostgreSQL, Temporal, codex-lb, headroom) are pinned by digest in the compose
   template. CLIs installed on first use come from per-provider npm lockfiles
   in the CLI image, the Cursor agent from a checksum-pinned archive.

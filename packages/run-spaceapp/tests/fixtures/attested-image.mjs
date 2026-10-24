@@ -49,19 +49,28 @@ export function attestedImage({
   return { repository, digest, index, objects };
 }
 
-/** A fake ghcr.io for `images`; `requests` lists every path read, `tags` maps a tag to an image's index digest. */
-export function fakeRegistry(images, { tags = {}, tamper = new Set() } = {}) {
+/**
+ * A fake ghcr.io for `images`, as registry-https.mjs's httpsGet sees it: blobs redirect to the storage host like ghcr.io's.
+ * `requests` lists every URL read with its Authorization header; `tags` maps a tag to an index digest; `answer(url)` may
+ * replace any answer (or throw).
+ */
+export function fakeRegistry(images, { tags = {}, tamper = new Set(), answer = () => null } = {}) {
   const requests = [];
-  const fetch = async (url) => {
-    const { pathname, searchParams } = new URL(url);
-    requests.push(`${pathname}${searchParams.size ? `?${searchParams}` : ""}`);
-    if (pathname === "/token") return Response.json({ token: "anonymous" });
-    const [, , owner, name, kind, reference] = pathname.split("/");
-    const image = images.find((candidate) => candidate.repository === `${owner}/${name}`);
-    const digest = tags[`${owner}/${name}:${reference}`] ?? reference;
-    const bytes = image?.objects.get(digest);
-    if (!bytes || !["manifests", "blobs"].includes(kind)) return new Response("not found", { status: 404 });
-    return new Response(tamper.has(digest) ? Buffer.concat([bytes, Buffer.from(" ")]) : bytes);
+  const get = async (url, { headers = {} } = {}) => {
+    const { host, pathname } = new URL(url);
+    requests.push({ url, authorization: headers.Authorization ?? null });
+    const replaced = await answer(url);
+    if (replaced) return replaced;
+    if (host === "ghcr.io" && pathname === "/token") return { status: 200, body: Buffer.from(JSON.stringify({ token: "anonymous" })) };
+    if (host === "ghcr.io" && pathname.includes("/blobs/")) {
+      return { status: 307, location: `https://pkg-containers.githubusercontent.com/ghcr1/blobs/${pathname.split("/").pop()}?sig=x`, body: Buffer.alloc(0) };
+    }
+    const digestOrTag = pathname.split("/").pop();
+    const repository = host === "ghcr.io" ? pathname.split("/").slice(2, 4).join("/") : null;
+    const digest = tags[`${repository}:${digestOrTag}`] ?? digestOrTag;
+    const bytes = images.map((image) => image.objects.get(digest)).find(Boolean);
+    if (!bytes || (repository && !images.some((image) => image.repository === repository && image.objects.has(digest)))) return { status: 404, body: Buffer.from("not found") };
+    return { status: 200, body: tamper.has(digest) ? Buffer.concat([bytes, Buffer.from(" ")]) : bytes };
   };
-  return { fetch, requests };
+  return { get, requests };
 }

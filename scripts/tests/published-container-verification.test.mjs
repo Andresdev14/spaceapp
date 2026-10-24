@@ -14,7 +14,7 @@ async function verify(images, argv) {
   const write = process.stdout.write;
   process.stdout.write = () => true;
   try {
-    return await runCli(["--version", "1.1.8", ...argv], (repository, reference) => loadImageAttestations(repository, reference, { fetch: registry.fetch }));
+    return await runCli(["--version", "1.1.8", ...argv], (repository, reference) => loadImageAttestations(repository, reference, { get: registry.get }));
   } finally {
     process.stdout.write = write;
     process.exitCode = 0;

@@ -66,6 +66,7 @@ import {
   isInstallPingAllowed
 } from "./telemetry.mjs";
 import { PACKAGE_IMAGE_LOCK } from "./image-lock.mjs";
+import { IMAGE_VERIFY_OFF_WARNING, imageVerificationOff } from "./image-attestations.mjs";
 // scripts/portable-restore.mjs (in the core image) exits with this code when a restore changed nothing or put everything back.
 export const RESTORE_UNCHANGED_EXIT = 3;
 
@@ -334,6 +335,7 @@ export async function run(argv, {
 
   const [command = "help", ...args] = filteredArgv;
   const root = resolveSpaceAppHome({ env, platform });
+  if (imageVerificationOff(env)) stderr.write(IMAGE_VERIFY_OFF_WARNING);
 
   if (["help", "--help", "-h"].includes(command) || args.includes("--help") || args.includes("-h")) {
     stdout.write(helpText());

@@ -18,8 +18,8 @@ import {
   stripTrailingLineEndings
 } from "./string-utils.mjs";
 import { UNIVERSAL_COMMAND } from "./package-info.mjs";
-import { verifyLockedImages } from "./image-attestations.mjs";
-import { imageDigestEnv, PACKAGE_IMAGE_LOCK, parseRecordedDigests } from "./image-lock.mjs";
+import { imageVerificationOff, verifyLockedImages } from "./image-attestations.mjs";
+import { IMAGE_TARGETS, imageDigestEnv, PACKAGE_IMAGE_LOCK, parseRecordedDigests } from "./image-lock.mjs";
 
 const CONFIG_SCHEMA_VERSION = 4;
 const CONTAINER_SECRET_MODE = 0o644;
@@ -955,14 +955,22 @@ export async function writeRuntimeFiles(root, config, imageLock = PACKAGE_IMAGE_
   await ensureOwnerOnlySecrets(root);
   // Each runtime version a locked package installs keeps its digests, for a later rollback to it.
   const recorded = await readRecordedDigests(root);
-  if (imageLock && imageLock.runtimeVersion === config.version && JSON.stringify(recorded[config.version]) !== JSON.stringify(imageLock.images)) {
-    // Before a locked version is first used here, its images' provenance must check out (image-attestations.mjs); the
-    // evidence names the run and public commit that built the bytes this installation runs.
-    const evidence = await verifyImages(imageLock);
+  if (imageLock && imageLock.runtimeVersion === config.version) {
+    // Until a locked version's images have checked out here (image-attestations.mjs), every run verifies them first; the
+    // evidence names the run and public commit that built the bytes this installation runs. With the opt-out the
+    // version is recorded as unverified, and is verified on the first run without it.
     const attestations = await readFile(join(root, "image-attestations.json"), "utf8").then(JSON.parse).catch(() => ({}));
-    await atomicWrite(join(root, "image-attestations.json"), `${JSON.stringify({ ...attestations, [config.version]: evidence }, null, 2)}\n`, 0o644);
-    recorded[config.version] = { ...imageLock.images };
-    await atomicWrite(join(root, "image-digests.json"), `${JSON.stringify(recorded, null, 2)}\n`, 0o644);
+    const verified = IMAGE_TARGETS.every((target) => attestations?.[config.version]?.images?.[target]?.index === imageLock.images[target]);
+    if (!verified && !(imageVerificationOff() && attestations?.[config.version]?.skipped)) {
+      const evidence = imageVerificationOff()
+        ? { runtimeVersion: config.version, skipped: "SPACEAPP_IMAGE_VERIFY=off", at: new Date().toISOString() }
+        : await verifyImages(imageLock);
+      await atomicWrite(join(root, "image-attestations.json"), `${JSON.stringify({ ...attestations, [config.version]: evidence }, null, 2)}\n`, 0o644);
+    }
+    if (JSON.stringify(recorded[config.version]) !== JSON.stringify(imageLock.images)) {
+      recorded[config.version] = { ...imageLock.images };
+      await atomicWrite(join(root, "image-digests.json"), `${JSON.stringify(recorded, null, 2)}\n`, 0o644);
+    }
   }
   await atomicWrite(join(root, "runtime.env"), renderRuntimeEnv(config, imageLock, recorded));
   await atomicWrite(join(root, "compose.workspaces.yml"), renderWorkspaceCompose(config, { cliSandbox: await userNamespacesUsable() }));
