@@ -254,7 +254,7 @@ test("core never runs OpenCode itself", async () => {
   const direct = /spawn\("opencode"|"\/usr\/local\/bin\/opencode"|\["credential-smoke"\]|\[definition\.credentialObservationAction\]/;
   const found = execFileSync("grep", ["-rlE", direct.source, "--include=*.ts", "--exclude-dir=__tests__", src], { encoding: "utf8" })
     .trim().split("\n").map((path) => path.slice(src.length + 1)).sort();
-  assert.deepEqual(found, ["cli-runtimes.ts", "cli-terminal.ts", "opencode-model-bench.ts", "room-agent-model-resolver.ts"]);
+  assert.deepEqual(found, ["cli-runtimes.ts", "cli-terminal.ts", "opencode-model-bench.ts", "room-agent-model-resolver.ts", "setup-assistant.ts", "setup-room-agent-check.ts"]);
   // Each one takes the public credential host's path when there is one.
   const app = await read("app.ts");
   assert.match(app, /const publicCredentialHost = createPublicCredentialHost\(config\);\n  const runOpenCode = publicCredentialHost\?\.openCodeText \?\? runOpenCodeText;/);
@@ -266,6 +266,16 @@ test("core never runs OpenCode itself", async () => {
   assert.match(app, /completeRoomAgentPrompt\(\{[^}]*runOpenCode \}\)/);
   assert.doesNotMatch(app, /createOpenCodeTextModel\(\)|checkCliRuntimeCredential\(runtime\)|observeCliRuntimeCredential\(runtime\)/);
   assert.match(await read("cli-terminal.ts"), /this\.options\.credentialHost\n\s+\? await this\.options\.credentialHost\.execute\(runtime\.detectedCommandPath, \["credential-smoke"\]/);
+  // First Setup (1.1.8): the setup assistant and the Room Agent check take the credential host's OpenCode before their own.
+  const setupWiring = await read("setup-wiring.ts");
+  assert.match(setupWiring, /\.\.\.\(publicCredentialHost \? \{ openCodeText: publicCredentialHost\.openCodeText, openCodeModels: publicCredentialHost\.openCodeModels \} : \{\}\)/);
+  assert.match(setupWiring, /\.\.\.\(publicCredentialHost \? \{ openCodeModels: publicCredentialHost\.openCodeModels,\s+checkFreeModel: \(modelId: string\) => checkNativeSetupFreeModel\(publicCredentialHost, "opencode-vscode-parity", modelId\) \} : \{\}\)/);
+  const setupAssistant = await read("setup-assistant.ts");
+  assert.ok(setupAssistant.indexOf("if (options.openCodeText && options.openCodeModels)") >= 0 &&
+    setupAssistant.indexOf("if (options.openCodeText && options.openCodeModels)") < setupAssistant.indexOf("openCodeExecutor("));
+  const roomAgentCheck = await read("setup-room-agent-check.ts");
+  assert.ok(roomAgentCheck.indexOf("if (options.checkFreeModel && options.openCodeModels)") >= 0 &&
+    roomAgentCheck.indexOf("if (options.checkFreeModel && options.openCodeModels)") < roomAgentCheck.indexOf("openCodeExecutor("));
   assert.match(await read("room-agent.ts"), /runOpenCode = runOpenCodeText \} = input;/);
   assert.doesNotMatch(await read("room-agent.ts"), /await runOpenCodeText\(/);
 });
