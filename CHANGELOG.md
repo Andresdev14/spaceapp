@@ -5,6 +5,12 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.1.8] - 2026-10-25
+
+Source: sanitized Space app @ 8d5bf21b32 (4948 files). Verifies SpaceApp's image attestations before an
+installation first uses a version, restores backups more safely, and ships the remaining fixes from the 1.1.7
+reviews; open items are listed in `docs/quality/KNOWN_LIMITATIONS.md`.
+
 ### Backup and restore
 
 - A restore that fails without changing anything, or that puts every database and file back, starts SpaceApp again with its
