@@ -59,7 +59,6 @@
   "apps/web/tests/app-icons.test.tsx": "two Live pane files import lucide-react directly at this commit (fixed upstream after 1.1.5)",
   "apps/web/tests/dots-proof-probe.test.tsx": "reads a private deploy file or script",
   "apps/web/tests/public-deployment-config.test.ts": "reads a private deploy file or script",
-  "apps/web/tests/terminal-hidden-echo.test.ts": "the export rewrites private values in the test or the code (review F18)",
   "apps/web/tests/ui-parity-manifest.test.ts": "refers to tests that stay private",
   "apps/worker/tests/memory-maintenance.test.ts": "reads a private deploy file or script",
   "apps/worker/tests/memory-mutation-activity.test.ts": "reads a private deploy file or script",
