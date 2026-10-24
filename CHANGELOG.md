@@ -47,6 +47,12 @@ Semantic Versioning.
 - The CLIs installed on first use (Codex, Gemini, Qwen, Kimi, Grok, Autohand, Copilot, DeepSeek, Claude Code) install with
   `npm ci` from a lockfile per provider in the CLI image, so every dependency is pinned with its integrity hash, not only
   the CLI's own version. `provider install claude` uses the same lockfile.
+- Before an installation first uses a SpaceApp version, the launcher checks its images' attestations: every platform image
+  in each pinned index must have an SBOM and a provenance statement about that exact image from the public release
+  workflow on `main`, read by digest. It records the release run and commit in `image-attestations.json` and stops before
+  pulling when a check fails. The release workflow runs the same check, and a full release's images must come from its
+  own commit. `scripts/shipped-image-evidence.mjs` confirms that the lab's installs of the published `next` package ran
+  exactly its locked images before `latest` (reviews EXT-C-F5, IR117-C-F7).
 
 ### Licence
 

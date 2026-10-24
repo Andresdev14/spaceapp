@@ -26,7 +26,14 @@ account.
   the release then writes each image's digest into the npm package
   (`templates/images.lock.json`, published with npm provenance) and the launcher
   pulls `name:version@sha256:…`, so a moved tag cannot change what an install
-  runs; older packages pull by exact version tag. Third-party images
+  runs; older packages pull by exact version tag. From run-spaceapp 1.1.8 the
+  launcher also checks, before it first uses a locked version, that each
+  platform image in every pinned index has an SBOM and a provenance statement
+  about that exact image from `oll4com/spaceapp`'s release workflow on `main`,
+  all read by digest from the pinned index; it records the release run and
+  commit in `image-attestations.json` and stops before pulling if a check
+  fails. It reads ghcr.io directly over HTTPS, not through Docker's proxy
+  settings. Third-party images
   (PostgreSQL, Temporal, codex-lb, headroom) are pinned by digest in the compose
   template. CLIs installed on first use come from per-provider npm lockfiles
   in the CLI image, the Cursor agent from a checksum-pinned archive.

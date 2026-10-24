@@ -2070,8 +2070,8 @@
       "dependency": null,
       "status": "confirmed",
       "reproduction": null,
-      "evidence": "packages/run-spaceapp/templates/compose.yml; launcher suite 164/164",
-      "disposition": "Public 813b76b: pgvector, Temporal and codex-lb are pinned by multi-arch index digest (headroom already was); the README and security model now say that SpaceApp images are pulled by exact version tag, which the release workflow publishes once (it fails closed when a tag exists) with SBOM and provenance attestations it verifies. Open: verifying the first-party digest or attestation at install time. Internal review 1.1.5 Codex #9: still open for SpaceApp's own images; planned for 1.1.7. External review 2026-10-16 #8. 2026-10-17: public overlay 219b4c0 (ships in run-spaceapp 1.1.7, with the codex-sessions-init service pinned too): after the images are published and verified, the release writes their digests into the tested npm package (templates/images.lock.json, the only allowed difference) and the launcher pulls name:version@sha256; the devtest probe accepts pinned images. Proven only by the next real publish.",
+      "evidence": "packages/run-spaceapp/templates/compose.yml; launcher suite 164/164; packages/run-spaceapp/tests/image-attestations.test.mjs; scripts/tests/published-container-verification.test.mjs",
+      "disposition": "Public 813b76b: pgvector, Temporal and codex-lb are pinned by multi-arch index digest (headroom already was); the README and security model now say that SpaceApp images are pulled by exact version tag, which the release workflow publishes once (it fails closed when a tag exists) with SBOM and provenance attestations it verifies. Open: verifying the first-party digest or attestation at install time. Internal review 1.1.5 Codex #9: still open for SpaceApp's own images; planned for 1.1.7. External review 2026-10-16 #8. 2026-10-17: public overlay 219b4c0 (ships in run-spaceapp 1.1.7, with the codex-sessions-init service pinned too): after the images are published and verified, the release writes their digests into the tested npm package (templates/images.lock.json, the only allowed difference) and the launcher pulls name:version@sha256; the devtest probe accepts pinned images. Proven only by the next real publish. 1.1.8 (task:6sCDD1rdjPyC): before an installation first uses a locked version, the launcher checks its images (packages/run-spaceapp/src/image-attestations.mjs): every platform image in each pinned index needs an SBOM and an SLSA provenance statement about that exact image from oll4com/spaceapp's release.yml on main, all read by digest from the pinned index; it records the run and commit in image-attestations.json and stops before pulling otherwise. The release's verify-published-containers.mjs runs the same check, with this run's commit for a full release. Checked read-only against the published 1.1.7 images (run 39996418646, f1c4e83). Evidence still missing: an install of a published 1.1.8 package.",
       "resolution": "partial"
     },
     {
@@ -3287,12 +3287,12 @@
       "dependency": null,
       "severity": "P2",
       "status": "confirmed",
-      "resolution": "open",
+      "resolution": "partial",
       "affected": "scripts/release-evidence.mjs, scripts/embed-image-lock.mjs, scripts/verify-published-containers.mjs (public release workflow)",
       "reproduction": null,
-      "evidence": "release/acceptance.json limitations; reviewer read of the release workflow",
+      "evidence": "release/acceptance.json limitations; reviewer read of the release workflow; scripts/tests/shipped-image-evidence.test.mjs",
       "observation": "The release gate binds the acceptance evidence to the source digest; the published images are rebuilt by the release workflow and pinned by the digests it resolves afterwards, not the image IDs the lab tested, and attestation checks verify predicate types only",
-      "disposition": "Open (1.1.8, task:6sCDD1rdjPyC). Users run images built from the tested source, not the tested image bytes; recording the tested digests and refusing or re-testing on a mismatch is planned."
+      "disposition": "1.1.8 (task:6sCDD1rdjPyC): the tested image bytes stay the source candidate's local build, so the evidence is now tied to the shipped bytes after publication: the release verifies that a full release's images were built by its own commit from provenance about each platform image (not predicate types only), every install records the run, commit and digests it verified (image-attestations.json), and scripts/shipped-image-evidence.mjs passes only when the lab's installs of the published next package ran exactly its locked images; the runbook requires it before latest. Evidence still missing: that run for a published 1.1.8."
     }
   ]
 }

@@ -50,11 +50,13 @@ test("pinned images are looked up by digest first, since a digest pull leaves no
 test("each locked version's digests are recorded, so a rollback to it pulls the same images by digest (1.1.8)", async () => {
   const root = await mkdtemp(join(tmpdir(), "spaceapp-recorded-digests-"));
   const lock118 = { schemaVersion: 1, runtimeVersion: "1.1.8", images: { core: digest("d"), cli: digest("e"), browser: digest("f") } };
-  await writeRuntimeFiles(root, createDefaultConfig({ version: "1.1.7" }), lock);
-  await writeRuntimeFiles(root, createDefaultConfig({ version: "1.1.8" }), lock118);
+  // The registry check is image-attestations.test.mjs's; here every lock passes it.
+  const verified = async (imageLock) => ({ runtimeVersion: imageLock.runtimeVersion, verifiedAt: "2026-10-24T00:00:00.000Z", images: {} });
+  await writeRuntimeFiles(root, createDefaultConfig({ version: "1.1.7" }), lock, verified);
+  await writeRuntimeFiles(root, createDefaultConfig({ version: "1.1.8" }), lock118, verified);
   assert.deepEqual(await readRecordedDigests(root), { "1.1.7": lock.images, "1.1.8": lock118.images });
   // Rolling back with the 1.1.8 package: 1.1.7 is pinned from the record, not pulled by tag.
-  await writeRuntimeFiles(root, createDefaultConfig({ version: "1.1.7" }), lock118);
+  await writeRuntimeFiles(root, createDefaultConfig({ version: "1.1.7" }), lock118, verified);
   const env = await readFile(join(root, "runtime.env"), "utf8");
   assert.match(env, /^SPACEAPP_IMAGE_TAG=1\.1\.7\nSPACEAPP_CORE_IMAGE_DIGEST=@sha256:a{64}\nSPACEAPP_CLI_IMAGE_DIGEST=@sha256:b{64}\nSPACEAPP_BROWSER_IMAGE_DIGEST=@sha256:c{64}\n/m);
   // A version never installed with a lock still pulls by tag.
