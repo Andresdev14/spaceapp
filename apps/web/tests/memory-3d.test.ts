@@ -282,6 +282,7 @@ describe("3D memory projection", () => {
       lineWidth: 1,
       globalAlpha: 1,
       clearRect: vi.fn(),
+      setTransform: vi.fn(),
       beginPath: vi.fn(),
       moveTo: vi.fn(),
       lineTo: vi.fn(),
