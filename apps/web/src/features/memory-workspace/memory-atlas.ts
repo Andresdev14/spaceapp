@@ -7,6 +7,7 @@ export type MemoryAtlasPosition = { x: number; y: number; color: string; hub: bo
 export type MemoryAtlasGroup = { id: string; label: string; color: string; count: number; kind: "tag" | "topic" | "month" | "archive" };
 export const memorySourceMonth = (node: MemoryGraphNode) => node.sourcePath?.match(/(?:^|[_/-])(20\d{2}-(?:0[1-9]|1[0-2]))(?:[_. /-]|$)/)?.[1] ?? null;
 const monthLabelCache = new Map<string, string>();
+/** Formats a YYYY-MM archive month string into a cached short human-readable label. */
 export const memoryMonthLabel = (month: string) => {
   const cached = monthLabelCache.get(month);
   if (cached) return cached;
@@ -17,6 +18,7 @@ export const memoryMonthLabel = (month: string) => {
 
 export const MIN_ATLAS_TAG_COUNT = 10;
 
+/** Deterministic ASCII comparator for fast node and topic ID ordering. */
 const compareId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** Colors and labels describe real taxonomy or canonical source months; links are never invented. */

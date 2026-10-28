@@ -317,7 +317,7 @@ export const MAX_OVERVIEW_NODE_LIMIT = 50_000;
 export const MAX_OVERVIEW_EDGE_LIMIT = 150_000;
 export const OVERVIEW_EDGE_MULTIPLIER = 3;
 
-// Keep the same payload budget while retaining the taxonomy needed to interpret a large archive.
+/** Selects up to `limit` overview nodes while preserving core source files, top tags, and their representative neighbors. */
 export function selectOverviewNodes(
   nodes: MemoryGraphNode[],
   edges: MemoryGraphEdge[],
@@ -352,6 +352,7 @@ export function selectOverviewNodes(
   return [...selected.values()].slice(0, maxNodes);
 }
 
+/** Registers the admin memory graph HTTP routes on the Fastify instance. */
 export function registerMemoryGraphRoutes(
   app: FastifyInstance,
   options: {

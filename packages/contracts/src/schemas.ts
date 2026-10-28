@@ -7220,7 +7220,7 @@ export const memoryGraphSnapshotSchema = z
     revisionHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     generatedAt: isoDateTimeSchema,
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
-    records: z.array(memoryGraphRecordSchema).max(10_000),
+    records: z.array(memoryGraphRecordSchema).max(50_000),
     nodes: z.array(memoryGraphNodeSchema).max(50_000),
     edges: z.array(memoryGraphEdgeSchema).max(200_000),
     issues: z.array(memoryGraphIssueSchema).max(20_000),

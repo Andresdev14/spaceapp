@@ -26,6 +26,7 @@ self.onmessage = (event: MessageEvent<{ nodes: MemoryGraphNode[]; edges: MemoryG
   );
 
   const batchSteps = nodes.length > 10_000 ? 12 : nodes.length > 2000 ? 18 : 60;
+  /** Advances the 3D force layout by one batch and posts transferable packed coordinates. */
   const stepNext = () => {
     const result = stepper.step(batchSteps);
     const packed = stepper.packForNodes(nodes);
@@ -42,7 +43,7 @@ self.onmessage = (event: MessageEvent<{ nodes: MemoryGraphNode[]; edges: MemoryG
       setTimeout(stepNext, 0);
       return;
     }
-    const includeMaps = nodes.length <= 2000 && !skip2D;
+    const includeMaps = !skip2D;
     const positions = includeMaps ? [...layoutMemoryNetwork(nodes, edges)] : undefined;
     const depth = nodes.length <= 2000 ? [...stepper.toMap()] : undefined;
     self.postMessage(

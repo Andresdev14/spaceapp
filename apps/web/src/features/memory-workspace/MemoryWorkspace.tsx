@@ -14,6 +14,19 @@ import "./memory-atlas.css";
 
 const DesktopMemoryGraph = lazy(() => import("./DesktopMemoryGraph.js"));
 
+/** Synchronously probes whether WebGL2 rendering is available and not disabled via URL query. */
+function supportsWebGL2(): boolean {
+  if (typeof window === "undefined" || typeof document === "undefined") return false;
+  try {
+    if (new URLSearchParams(window.location.search).get("webgl") === "0") return false;
+    const probe = document.createElement("canvas");
+    return Boolean(probe.getContext("webgl2"));
+  } catch {
+    return false;
+  }
+}
+
+/** Interactive memory workspace supporting 2D/3D atlas exploration, calendar history, and review. */
 export function MemoryWorkspace({ shellMode, onClose, initialMode = "calendar" }: {
   shellMode: "desktop" | "tablet" | "mobile";
   activeRoomId: string | null;
@@ -26,7 +39,8 @@ export function MemoryWorkspace({ shellMode, onClose, initialMode = "calendar" }
   // Mobile shows the Calendar list only: no graph canvas (ADR-006) and no review panels.
   const workspaceMode = shellMode === "mobile" ? "calendar" : selectedMode;
   const [view3D, setView3D] = useState(force3DFromUrl);
-  const [webglFallback, setWebglFallback] = useState(false);
+  const initialWebglSupported = useMemo(() => supportsWebGL2(), []);
+  const [webglFallback, setWebglFallback] = useState(() => !initialWebglSupported);
   const [showTitles, setShowTitles] = useState(true);
   const [reset3D, setReset3D] = useState(0);
   const [queryDraft, setQueryDraft] = useState("");
@@ -71,7 +85,7 @@ export function MemoryWorkspace({ shellMode, onClose, initialMode = "calendar" }
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [closeDetail, onClose, queryDraft, selectedNodeId]);
 
-  const effectiveOverviewLimit = view3D && !webglFallback ? 50_000 : undefined;
+  const effectiveOverviewLimit = view3D && initialWebglSupported && !webglFallback ? 50_000 : undefined;
 
   useEffect(() => {
     if (workspaceMode !== "atlas") return;
@@ -110,6 +124,7 @@ export function MemoryWorkspace({ shellMode, onClose, initialMode = "calendar" }
   const [layout, setLayout] = useState<{
     atlas: typeof atlas;
     positions: Map<string, MemoryAtlasPosition>;
+    positionsReady: boolean;
     depth: Map<string, MemoryPoint3D>;
     packedDepth: Float32Array | null;
     done: boolean;
@@ -132,6 +147,7 @@ export function MemoryWorkspace({ shellMode, onClose, initialMode = "calendar" }
           : previous?.atlas === atlas
             ? previous.positions
             : atlas.positions;
+        const positionsReady = Boolean(coordinates) || (previous?.atlas === atlas && previous.positionsReady);
         const nextDepth = event.data.depth
           ? new Map(event.data.depth)
           : previous?.atlas === atlas
@@ -140,6 +156,7 @@ export function MemoryWorkspace({ shellMode, onClose, initialMode = "calendar" }
         return {
           atlas,
           positions: nextPositions,
+          positionsReady,
           depth: nextDepth,
           packedDepth,
           done
@@ -151,7 +168,8 @@ export function MemoryWorkspace({ shellMode, onClose, initialMode = "calendar" }
     worker.postMessage({ nodes: atlas.nodes, edges: atlas.edges, skip2D: view3D && atlas.nodes.length > 2000 });
     return () => worker.terminate();
   }, [workspaceMode, atlas, view3D]);
-  const layoutPending = typeof Worker !== "undefined" && atlas.nodes.length > 0 && layout?.atlas !== atlas;
+  const layoutPending = typeof Worker !== "undefined" && atlas.nodes.length > 0 &&
+    (layout?.atlas !== atlas || (!view3D && !layout.positionsReady));
   const atlasPositions = layout?.atlas === atlas ? layout.positions : atlas.positions;
   const summary = graph?.data.summary;
   const memoryCount = atlas.nodes.filter(node => node.type === "MEMORY").length;

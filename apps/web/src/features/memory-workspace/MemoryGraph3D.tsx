@@ -150,6 +150,7 @@ void main() {
 }
 `;
 
+/** Parses a 6-digit hex color string into an RGB byte tuple. */
 function parseHexRgb(hex: string): [number, number, number] {
   const clean = hex.startsWith("#") ? hex.slice(1) : hex;
   if (clean.length === 6) {
@@ -159,6 +160,7 @@ function parseHexRgb(hex: string): [number, number, number] {
   return [115, 149, 173];
 }
 
+/** Compiles a single WebGL2 vertex or fragment shader from GLSL ES 3.00 source. */
 function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null {
   const shader = gl.createShader(type);
   if (!shader) return null;
@@ -171,6 +173,7 @@ function compileShader(gl: WebGL2RenderingContext, type: number, source: string)
   return shader;
 }
 
+/** Links a WebGL2 shader program from vertex and fragment shader sources. */
 function createProgram(gl: WebGL2RenderingContext, vsSource: string, fsSource: string): WebGLProgram | null {
   const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
   const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
@@ -212,6 +215,7 @@ interface WebGLResources {
   nodeUniforms: Record<string, WebGLUniformLocation | null>;
 }
 
+/** Allocates WebGL2 shader programs, VAOs, and vertex/instance buffers for 3D graph rendering. */
 function initWebGLResources(gl: WebGL2RenderingContext): WebGLResources | null {
   const edgeProgram = createProgram(gl, EDGE_VERTEX_SHADER, EDGE_FRAGMENT_SHADER);
   const nodeProgram = createProgram(gl, NODE_VERTEX_SHADER, NODE_FRAGMENT_SHADER);
@@ -306,6 +310,7 @@ function initWebGLResources(gl: WebGL2RenderingContext): WebGLResources | null {
   };
 }
 
+/** Renders the interactive 3D memory graph with WebGL2 instancing and a 2,000-node Canvas 2D fallback. */
 export function MemoryGraph3D({
   nodes,
   edges,
@@ -395,27 +400,8 @@ export function MemoryGraph3D({
     }
 
     const totalValidEdges = validEdgeEndpoints.length / 2;
-    const maxBackgroundEdges = 18_000;
-    let renderEdgeEndpoints: Int32Array;
-    let renderEdgeKinds: Float32Array;
-    if (totalValidEdges <= maxBackgroundEdges) {
-      renderEdgeEndpoints = Int32Array.from(validEdgeEndpoints);
-      renderEdgeKinds = Float32Array.from(validEdgeKinds);
-    } else {
-      const sampledEndpoints: number[] = [];
-      const sampledKinds: number[] = [];
-      const stride = Math.max(1, Math.ceil(totalValidEdges / maxBackgroundEdges));
-      for (let i = 0; i < totalValidEdges; i++) {
-        const kind = validEdgeKinds[i * 2]!;
-        if (kind > 0.5 || i % stride === 0) {
-          sampledEndpoints.push(validEdgeEndpoints[i * 2]!, validEdgeEndpoints[i * 2 + 1]!);
-          sampledKinds.push(kind, kind);
-        }
-      }
-      renderEdgeEndpoints = Int32Array.from(sampledEndpoints);
-      renderEdgeKinds = Float32Array.from(sampledKinds);
-    }
-
+    const allEdgesTyped = Int32Array.from(validEdgeEndpoints);
+    const allKindsTyped = Float32Array.from(validEdgeKinds);
     const labelCandidates = buildMemory3DLabelCandidateIndices(nodes, edges);
 
     return {
@@ -426,9 +412,9 @@ export function MemoryGraph3D({
       neighborsByNode,
       incidentEdgesByNode,
       totalEdgeCount: totalValidEdges,
-      allEdgeEndpoints: Int32Array.from(validEdgeEndpoints),
-      edgeEndpoints: renderEdgeEndpoints,
-      edgeKinds: renderEdgeKinds,
+      allEdgeEndpoints: allEdgesTyped,
+      edgeEndpoints: allEdgesTyped,
+      edgeKinds: allKindsTyped,
       labelCandidates
     };
   }, [nodes, edges, positions]);
@@ -645,14 +631,19 @@ export function MemoryGraph3D({
     uploadGraphRef.current = syncStaticBuffers;
     uploadPositionsRef.current = syncPositionBuffers;
 
+    let cachedSpatialPacked: Float32Array | null = null;
+    let cachedSpatialGl = false;
     const getSpatialIndex = (): Memory3DSpatialIndex => {
       const { nodes: nodeList, packed: pos, extent: ext, staticGraphData: data } = current.current;
       const scale = Math.min(width, height) * 0.4 / ext;
       const cam = cameraRef.current;
       const key = `${nodeList.length}:${cam.yaw.toFixed(4)}:${cam.pitch.toFixed(4)}:${cam.zoom.toFixed(4)}:${width}:${height}:${scale.toFixed(4)}`;
-      if (!cachedSpatialIndex || cachedSpatialKey !== key) {
+      const glActive = Boolean(glResources && !contextLost);
+      if (!cachedSpatialIndex || cachedSpatialKey !== key || cachedSpatialPacked !== pos || cachedSpatialGl !== glActive) {
         cachedSpatialKey = key;
-        const activeNodes = glResources && !contextLost ? nodeList : nodeList.slice(0, FALLBACK_NODE_CAP);
+        cachedSpatialPacked = pos;
+        cachedSpatialGl = glActive;
+        const activeNodes = glActive ? nodeList : nodeList.slice(0, FALLBACK_NODE_CAP);
         cachedSpatialIndex = createMemory3DSpatialIndex(activeNodes, pos, data.baseSizes, cam, scale, width, height);
       }
       return cachedSpatialIndex;

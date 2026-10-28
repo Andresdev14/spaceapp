@@ -284,6 +284,7 @@ export function layoutMemoryNetwork3D(nodes: MemoryGraphNode[], edges: MemoryGra
   return stepper.toMap();
 }
 
+/** Projects a 3D memory coordinate into 2D viewport screen coordinates and perspective depth. */
 export function projectMemoryPoint(point: MemoryPoint3D, camera: MemoryCamera3D, scale: number, width: number, height: number) {
   const x = point.x * Math.cos(camera.yaw) + point.z * Math.sin(camera.yaw);
   const depth = -point.x * Math.sin(camera.yaw) + point.z * Math.cos(camera.yaw);
@@ -324,6 +325,7 @@ export function memory3DVolumeRatio(points: MemoryPoint3D[] | Float32Array): num
   return Math.max(0, determinant / Math.max(1e-12, ((xx + yy + zz) / 3) ** 3));
 }
 
+/** Computes the maximum radial extent of packed XYZ coordinates for viewport scaling. */
 export function computeMemory3DExtent(packed: Float32Array): number {
   let maxExtent = 60;
   for (let i = 0; i < packed.length; i += 3) {

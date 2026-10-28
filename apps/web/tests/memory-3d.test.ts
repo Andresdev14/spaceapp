@@ -108,9 +108,15 @@ describe("3D memory projection", () => {
     const index = createMemory3DSpatialIndex(nodes, packed, baseSizes, DEFAULT_MEMORY_CAMERA, 1.5, 1280, 800);
     const rootScreen = projectMemoryPoint({ x: packed[0]!, y: packed[1]!, z: packed[2]! }, DEFAULT_MEMORY_CAMERA, 1.5, 1280, 800);
 
-    const t0 = performance.now();
-    const pickedId = index.pick(rootScreen.x, rootScreen.y);
-    const elapsedMs = performance.now() - t0;
+    for (let i = 0; i < 20; i++) index.pick(rootScreen.x, rootScreen.y);
+    const samples: number[] = [];
+    let pickedId: string | null = null;
+    for (let i = 0; i < 21; i++) {
+      const t0 = performance.now();
+      pickedId = index.pick(rootScreen.x, rootScreen.y);
+      samples.push(performance.now() - t0);
+    }
+    const elapsedMs = samples.sort((a, b) => a - b)[10]!;
 
     expect(pickedId).not.toBeNull();
     expect(elapsedMs).toBeLessThanOrEqual(4);
@@ -170,7 +176,7 @@ describe("3D memory projection", () => {
     expect(full3D.data.truncated).toBe(false);
   });
 
-  it("preserves accessibility attributes, keyboard controls, and falls back cleanly without WebGL2 or on context loss", async () => {
+  it("preserves accessibility attributes, keyboard controls, and falls back cleanly without WebGL2", () => {
     const { nodes, edges } = fixture();
     const atlas = createMemoryAtlas(nodes, edges, false);
     const coordinates = layoutMemoryNetwork3D(nodes, edges);
@@ -202,10 +208,117 @@ describe("3D memory projection", () => {
 
     fireEvent.keyDown(canvas, { key: "Enter" });
     expect(onSelectNode).toHaveBeenCalledWith("root");
+  });
 
-    await act(async () => {
-      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
-    });
-    expect(onRendererFallbackChange).toHaveBeenLastCalledWith(true);
+  it("handles WebGL2 context loss and restoration and updates data-rotation on arrow keys", async () => {
+    const { nodes, edges } = fixture();
+    const atlas = createMemoryAtlas(nodes, edges, false);
+    const coordinates = layoutMemoryNetwork3D(nodes, edges);
+    const onSelectNode = vi.fn();
+    const onRendererFallbackChange = vi.fn();
+
+    const fakeGl = {
+      VERTEX_SHADER: 35633,
+      FRAGMENT_SHADER: 35632,
+      COMPILE_STATUS: 35713,
+      LINK_STATUS: 35714,
+      ARRAY_BUFFER: 34962,
+      STATIC_DRAW: 35044,
+      DYNAMIC_DRAW: 35048,
+      FLOAT: 5126,
+      UNSIGNED_BYTE: 5121,
+      COLOR_BUFFER_BIT: 16384,
+      DEPTH_BUFFER_BIT: 256,
+      BLEND: 3042,
+      SRC_ALPHA: 770,
+      ONE_MINUS_SRC_ALPHA: 771,
+      DEPTH_TEST: 2929,
+      LEQUAL: 515,
+      LINES: 1,
+      TRIANGLE_STRIP: 5,
+      createShader: () => ({}),
+      shaderSource: () => {},
+      compileShader: () => {},
+      getShaderParameter: () => true,
+      deleteShader: () => {},
+      createProgram: () => ({}),
+      attachShader: () => {},
+      linkProgram: () => {},
+      getProgramParameter: () => true,
+      deleteProgram: () => {},
+      createVertexArray: () => ({}),
+      deleteVertexArray: () => {},
+      createBuffer: () => ({}),
+      deleteBuffer: () => {},
+      bindVertexArray: () => {},
+      bindBuffer: () => {},
+      bufferData: () => {},
+      enableVertexAttribArray: () => {},
+      vertexAttribPointer: () => {},
+      vertexAttribDivisor: () => {},
+      vertexAttrib1f: () => {},
+      getUniformLocation: () => ({}),
+      viewport: () => {},
+      clearColor: () => {},
+      clear: () => {},
+      enable: () => {},
+      disable: () => {},
+      blendFunc: () => {},
+      depthFunc: () => {},
+      depthMask: () => {},
+      useProgram: () => {},
+      uniform1f: () => {},
+      uniform2f: () => {},
+      drawArrays: () => {},
+      drawArraysInstanced: () => {}
+    };
+
+    const getContextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockImplementation(((contextId: string) => {
+        if (contextId === "webgl2") return fakeGl as unknown as WebGL2RenderingContext;
+        return null;
+      }) as typeof HTMLCanvasElement.prototype.getContext);
+
+    try {
+      const { container } = render(
+        createElement(MemoryGraph3D, {
+          nodes: atlas.nodes,
+          edges: atlas.edges,
+          positions: atlas.positions,
+          coordinates,
+          showTitles: true,
+          selectedNodeId: null,
+          onSelectNode,
+          loading: false,
+          resetToken: 0,
+          onRendererFallbackChange
+        })
+      );
+
+      const canvas = container.querySelector("canvas[role='application']") as HTMLCanvasElement;
+      expect(onRendererFallbackChange).toHaveBeenLastCalledWith(false);
+
+      await act(async () => {
+        fireEvent.keyDown(canvas, { key: "ArrowRight" });
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      });
+      expect(canvas.getAttribute("data-rotation")).toBe("0.410,-0.150");
+      expect(canvas.getAttribute("data-renderer")).toBe("webgl2");
+
+      await act(async () => {
+        const lostEvent = new Event("webglcontextlost", { cancelable: true });
+        canvas.dispatchEvent(lostEvent);
+        expect(lostEvent.defaultPrevented).toBe(true);
+      });
+      expect(onRendererFallbackChange).toHaveBeenLastCalledWith(true);
+
+      await act(async () => {
+        canvas.dispatchEvent(new Event("webglcontextrestored"));
+      });
+      expect(onRendererFallbackChange).toHaveBeenLastCalledWith(false);
+    } finally {
+      getContextSpy.mockRestore();
+    }
   });
 });

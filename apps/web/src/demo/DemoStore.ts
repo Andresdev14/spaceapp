@@ -153,6 +153,7 @@ type DemoMemoryGraphQuery = {
   limit?: number;
 };
 
+/** Parses a synthetic memory graph node count from a number or shorthand string (e.g. "2k", "10k", "50k"). */
 export function parseSyntheticGraphSize(raw: string | number | null | undefined): number | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw === "number") {
@@ -856,6 +857,7 @@ export class DemoStore {
     };
   }
 
+  /** Overrides the synthetic memory graph node count used in the demo workspace. */
   setSyntheticMemoryGraphSize(nodeCount: number | null): void {
     this.syntheticNodeCountOverride = nodeCount ? Math.min(50_000, Math.max(10, Math.trunc(nodeCount))) : null;
     if (!this.syntheticNodeCountOverride) {
@@ -863,6 +865,7 @@ export class DemoStore {
     }
   }
 
+  /** Returns a cached deterministic synthetic memory graph for the requested node count. */
   private getSyntheticGraph(size: number) {
     if (!this.syntheticGraphCache || this.syntheticGraphCache.size !== size) {
       const { nodes, edges } = createSyntheticMemoryGraph(size);
@@ -876,6 +879,7 @@ export class DemoStore {
     return this.syntheticGraphCache;
   }
 
+  /** Builds a filtered memory graph payload from either the synthetic generator or the base demo fixture. */
   private memoryGraph(query: DemoMemoryGraphQuery = {}): MemoryGraphPayload {
     const base = this.fixture.memoryWorkspace.graph;
     const urlSize = typeof window !== "undefined"
