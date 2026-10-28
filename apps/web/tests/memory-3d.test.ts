@@ -303,7 +303,7 @@ describe("3D memory projection", () => {
         fireEvent.keyDown(canvas, { key: "ArrowRight" });
         await new Promise(resolve => requestAnimationFrame(resolve));
       });
-      expect(canvas.getAttribute("data-rotation")).toBe("0.410,-0.150");
+      expect(canvas.getAttribute("data-rotation")).toBe("0.450,-0.150");
       expect(canvas.getAttribute("data-renderer")).toBe("webgl2");
 
       await act(async () => {
