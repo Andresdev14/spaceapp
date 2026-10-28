@@ -273,10 +273,31 @@ describe("3D memory projection", () => {
       drawArraysInstanced: () => {}
     };
 
+    const fake2D = {
+      font: "",
+      fillStyle: "",
+      strokeStyle: "",
+      shadowColor: "",
+      shadowBlur: 0,
+      lineWidth: 1,
+      globalAlpha: 1,
+      clearRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      arc: vi.fn(),
+      fill: vi.fn(),
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+      measureText: (text: string) => ({ width: text.length * 6 })
+    };
+
     const getContextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, "getContext")
       .mockImplementation(((contextId: string) => {
         if (contextId === "webgl2") return fakeGl as unknown as WebGL2RenderingContext;
+        if (contextId === "2d") return fake2D as unknown as CanvasRenderingContext2D;
         return null;
       }) as typeof HTMLCanvasElement.prototype.getContext);
 
@@ -306,17 +327,23 @@ describe("3D memory projection", () => {
       expect(canvas.getAttribute("data-rotation")).toBe("0.450,-0.150");
       expect(canvas.getAttribute("data-renderer")).toBe("webgl2");
 
+      fake2D.arc.mockClear();
       await act(async () => {
         const lostEvent = new Event("webglcontextlost", { cancelable: true });
         canvas.dispatchEvent(lostEvent);
         expect(lostEvent.defaultPrevented).toBe(true);
+        await new Promise(resolve => requestAnimationFrame(resolve));
       });
       expect(onRendererFallbackChange).toHaveBeenLastCalledWith(true);
+      expect(canvas.getAttribute("data-renderer")).toBe("canvas2d-fallback");
+      expect(fake2D.arc).toHaveBeenCalled();
 
       await act(async () => {
         canvas.dispatchEvent(new Event("webglcontextrestored"));
+        await new Promise(resolve => requestAnimationFrame(resolve));
       });
       expect(onRendererFallbackChange).toHaveBeenLastCalledWith(false);
+      expect(canvas.getAttribute("data-renderer")).toBe("webgl2");
     } finally {
       getContextSpy.mockRestore();
     }
