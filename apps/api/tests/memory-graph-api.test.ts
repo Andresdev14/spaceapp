@@ -434,6 +434,30 @@ describe("Memory graph API", () => {
     await app.close();
   });
 
+  it("keeps the locale-aware node order for the default overview and when limit is specified", async () => {
+    const graphSnapshot = snapshot() as MemoryGraphSnapshot;
+    const ids = ["memory:b", "memory:B", "memory:a", "memory:A", "memory:10", "memory:2"];
+    graphSnapshot.nodes = ids.map((id) => ({ id, type: "MEMORY" as const, label: id, sourcePath: null, recordId: null }));
+    graphSnapshot.edges = [];
+    const byLocale = [...ids].sort((left, right) => left.localeCompare(right));
+    const byCodeUnit = [...ids].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+    // The fixture must distinguish the two orders, otherwise this test would prove nothing.
+    expect(byLocale).not.toEqual(byCodeUnit);
+
+    const app = await memoryGraphApp(true, new InMemorySpaceStore(), false, undefined, { graphSnapshot });
+    const defaultOverview = await app.inject({ method: "GET", url: "/api/admin/memory/graph/overview", headers: { cookie } });
+    expect(defaultOverview.statusCode).toBe(200);
+    expect(defaultOverview.json().data.nodes.map((node: { id: string }) => node.id)).toEqual(byLocale);
+
+    const explicitDefault = await app.inject({ method: "GET", url: "/api/admin/memory/graph/overview?limit=2000", headers: { cookie } });
+    expect(explicitDefault.json().data.nodes.map((node: { id: string }) => node.id)).toEqual(byLocale);
+
+    const largeOverview = await app.inject({ method: "GET", url: "/api/admin/memory/graph/overview?limit=2001", headers: { cookie } });
+    expect(largeOverview.statusCode).toBe(200);
+    expect(largeOverview.json().data.nodes.map((node: { id: string }) => node.id)).toEqual(byLocale);
+    await app.close();
+  });
+
   it("allows the 3D view to request up to 50,000 nodes and 150,000 edges via limit while redacting labels", async () => {
     const secretToken = ["sk", "overviewsecretvalue123456"].join("-");
     const graphSnapshot = snapshot() as MemoryGraphSnapshot;

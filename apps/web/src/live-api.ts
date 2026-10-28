@@ -1,6 +1,7 @@
 import type { ManagedPlanExecution, StartPlanExecutionRequest, PlanExecutionControlRequest, PlanStageOverrideRequest } from "@space/contracts";
 import type { AppDeviceSession } from "@space/contracts";
 import type { ClientErrorReport } from "./client-error-reporter.js";
+import { canParseJsonInWorker, parseJsonInWorker } from "./json-parse-worker.js";
 import type { LiveHistorySnapshot, PersistedLiveTurn } from "./features/live-pane/live-history-sync.js";
 import type { SetupVoiceProvider } from "./features/setup-connections/SetupVoiceConnection.js";
 import type { SetupDraft, SetupPlan, SetupRun, SetupTask, SetupReadinessReceipt, SetupExecutionEvent, SetupFeature, SetupFeatureId, SetupAvailability } from "@space/contracts";
@@ -861,7 +862,20 @@ function looksLikeJsonPayload(raw: string): boolean {
   return trimmed.startsWith("{") || trimmed.startsWith("[");
 }
 
-async function readResponsePayload(response: Response): Promise<unknown> {
+async function readResponsePayload(response: Response, parseInWorker = false): Promise<unknown> {
+  if (
+    parseInWorker &&
+    response.ok &&
+    canParseJsonInWorker() &&
+    typeof response.arrayBuffer === "function" &&
+    (response.headers.get("content-type")?.toLowerCase() ?? "").includes("application/json")
+  ) {
+    // Large bodies (the 50k-node memory overview) are parsed in a worker so JSON.parse never blocks
+    // the main thread. The buffer is transferred, and non-JSON bodies come back as raw text.
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength === 0) return null;
+    return parseJsonInWorker(buffer);
+  }
   if (typeof response.text !== "function") {
     if (typeof response.json === "function") {
       return response.json();
@@ -966,7 +980,7 @@ export interface VaultStateResponse {
   vault: { vaultId: string; epoch: number; delegationGeneration: number; kdf: VaultKdfParams; unlockKeyVersion: number; hasRecovery: boolean; auditSeq: number } | null;
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+async function request<T>(url: string, init?: RequestInit, options?: { parseInWorker?: boolean }): Promise<T> {
   const headers: Record<string, string> = {
     ...((init?.headers as Record<string, string> | undefined) ?? {})
   };
@@ -991,7 +1005,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     throw upstreamTransportError(error);
   }
 
-  const payload = await readResponsePayload(response);
+  const payload = await readResponsePayload(response, options?.parseInWorker === true);
   reportCoreApiResponse(response, payload, requestStartedAt);
   if (response.status === 401 || response.status === 403) {
     csrfToken = null;
@@ -3243,7 +3257,12 @@ export const api = {
     if (query.relationMode) params.set("relationMode", query.relationMode);
     if (query.limit !== undefined) params.set("limit", String(query.limit));
     const suffix = params.toString();
-    return request<MemoryGraphOverviewResponse>(`/api/admin/memory/graph/overview${suffix ? `?${suffix}` : ""}`);
+    // Only the large 3D overview (above the default 2,000 nodes) is parsed off the main thread.
+    return request<MemoryGraphOverviewResponse>(
+      `/api/admin/memory/graph/overview${suffix ? `?${suffix}` : ""}`,
+      undefined,
+      { parseInWorker: query.limit !== undefined && query.limit > 2000 }
+    );
   },
   memoryCalendar: (query: MemoryCalendarQuery = {}) => {
     const params = new URLSearchParams();

@@ -375,7 +375,7 @@ export function registerMemoryGraphRoutes(
     if (setSnapshotEtag(request, reply, snapshot.revisionHash ?? snapshot.sourceHash)) return reply.code(304).send();
     const availableMonths = await options.service.listAvailableMonths();
 
-    const anchors = filterNodes(snapshot, query).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+    const anchors = filterNodes(snapshot, query).sort((left, right) => left.id.localeCompare(right.id));
     const anchorIds = new Set(anchors.map((node) => node.id));
     const relatedIds = new Set<string>();
     if (query.relationMode === "RELATIONS" && anchorIds.size < snapshot.nodes.length) {
@@ -387,7 +387,7 @@ export function registerMemoryGraphRoutes(
     const relatedNodes = query.relationMode === "RELATIONS" && relatedIds.size > 0
       ? snapshot.nodes
         .filter((node) => !anchorIds.has(node.id) && relatedIds.has(node.id))
-        .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+        .sort((left, right) => left.id.localeCompare(right.id))
       : [];
     const matchingNodes = relatedNodes.length > 0 ? [...anchors, ...relatedNodes] : anchors;
     const matchingNodeIds = relatedNodes.length > 0 ? new Set(matchingNodes.map((node) => node.id)) : anchorIds;

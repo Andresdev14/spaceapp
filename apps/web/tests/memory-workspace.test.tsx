@@ -95,4 +95,12 @@ describe("Memory atlas data integrity", () => {
       expect.objectContaining({ id: "frequent-tag", kind: "tag", count: 10 })
     ]));
   });
+  it("breaks topic ties with locale-aware ordering for default-size graphs so 2D colors do not change", () => {
+    const nodes = [...["m1", "m2", "m3", "m4"].map(id => node(id)), node("topic:B", "TOPIC"), node("topic:a", "TOPIC")];
+    const edges = [edge("e1", "m1", "topic:B"), edge("e2", "m2", "topic:B"), edge("e3", "m3", "topic:a"), edge("e4", "m4", "topic:a")];
+    // The two orders disagree for these IDs, so the assertion below can tell them apart.
+    expect(["topic:a", "topic:B"].sort((left, right) => left.localeCompare(right))).not.toEqual(["topic:a", "topic:B"].sort());
+    const atlas = createMemoryAtlas(nodes, edges, false, 2);
+    expect(atlas.topics.map(topic => topic.id)).toEqual(["topic:a", "topic:B"]);
+  });
 });
