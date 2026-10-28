@@ -3230,6 +3230,7 @@ export const api = {
     lifecycleStatus?: MemoryLifecycleStatus;
     month?: string;
     relationMode?: "CLUSTERED" | "RELATIONS";
+    limit?: number;
   } = {}) => {
     const params = new URLSearchParams();
     if (query.q) params.set("q", query.q);
@@ -3240,6 +3241,7 @@ export const api = {
     if (query.lifecycleStatus) params.set("lifecycleStatus", query.lifecycleStatus);
     if (query.month) params.set("month", query.month);
     if (query.relationMode) params.set("relationMode", query.relationMode);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
     const suffix = params.toString();
     return request<MemoryGraphOverviewResponse>(`/api/admin/memory/graph/overview${suffix ? `?${suffix}` : ""}`);
   },

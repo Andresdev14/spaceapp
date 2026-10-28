@@ -312,9 +312,19 @@ function memoryIssuesRevisionHash(snapshotRevision: string, states: MemoryIssueS
   return digest(JSON.stringify({ snapshotRevision, stateRevisions }));
 }
 
+export const DEFAULT_OVERVIEW_NODE_LIMIT = 2000;
+export const MAX_OVERVIEW_NODE_LIMIT = 50_000;
+export const MAX_OVERVIEW_EDGE_LIMIT = 150_000;
+export const OVERVIEW_EDGE_MULTIPLIER = 3;
+
 // Keep the same payload budget while retaining the taxonomy needed to interpret a large archive.
-export function selectOverviewNodes(nodes: MemoryGraphNode[], edges: MemoryGraphEdge[]): MemoryGraphNode[] {
-  if (nodes.length <= 2000) return nodes;
+export function selectOverviewNodes(
+  nodes: MemoryGraphNode[],
+  edges: MemoryGraphEdge[],
+  limit = DEFAULT_OVERVIEW_NODE_LIMIT
+): MemoryGraphNode[] {
+  const maxNodes = Math.max(1, Math.min(MAX_OVERVIEW_NODE_LIMIT, Math.trunc(limit)));
+  if (nodes.length <= maxNodes) return nodes;
   const members = new Map<string, Set<string>>();
   const explicit = new Set<string>();
   const byId = new Map(nodes.map(node => [node.id, node]));
@@ -336,10 +346,10 @@ export function selectOverviewNodes(nodes: MemoryGraphNode[], edges: MemoryGraph
     if (first) selected.set(first, byId.get(first)!);
   }
   for (const node of nodes) {
-    if (selected.size >= 2000) break;
+    if (selected.size >= maxNodes) break;
     selected.set(node.id, node);
   }
-  return [...selected.values()];
+  return [...selected.values()].slice(0, maxNodes);
 }
 
 export function registerMemoryGraphRoutes(
@@ -364,33 +374,37 @@ export function registerMemoryGraphRoutes(
     if (setSnapshotEtag(request, reply, snapshot.revisionHash ?? snapshot.sourceHash)) return reply.code(304).send();
     const availableMonths = await options.service.listAvailableMonths();
 
-    const anchors = filterNodes(snapshot, query).sort((left, right) => left.id.localeCompare(right.id));
+    const anchors = filterNodes(snapshot, query).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
     const anchorIds = new Set(anchors.map((node) => node.id));
-    const relatedIds = query.relationMode === "RELATIONS"
-      ? new Set(snapshot.edges.flatMap((edge) => {
-        if (anchorIds.has(edge.source)) return [edge.target];
-        if (anchorIds.has(edge.target)) return [edge.source];
-        return [];
-      }))
-      : new Set<string>();
-    const relatedNodes = query.relationMode === "RELATIONS"
+    const relatedIds = new Set<string>();
+    if (query.relationMode === "RELATIONS" && anchorIds.size < snapshot.nodes.length) {
+      for (const edge of snapshot.edges) {
+        if (anchorIds.has(edge.source)) relatedIds.add(edge.target);
+        if (anchorIds.has(edge.target)) relatedIds.add(edge.source);
+      }
+    }
+    const relatedNodes = query.relationMode === "RELATIONS" && relatedIds.size > 0
       ? snapshot.nodes
         .filter((node) => !anchorIds.has(node.id) && relatedIds.has(node.id))
-        .sort((left, right) => left.id.localeCompare(right.id))
+        .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
       : [];
-    const matchingNodes = [...anchors, ...relatedNodes];
-    const matchingNodeIds = new Set(matchingNodes.map((node) => node.id));
+    const matchingNodes = relatedNodes.length > 0 ? [...anchors, ...relatedNodes] : anchors;
+    const matchingNodeIds = relatedNodes.length > 0 ? new Set(matchingNodes.map((node) => node.id)) : anchorIds;
     const matchingEdges = snapshot.edges.filter((edge) =>
       matchingNodeIds.has(edge.source) &&
       matchingNodeIds.has(edge.target) &&
       (query.relationMode !== "RELATIONS" || anchorIds.has(edge.source) || anchorIds.has(edge.target))
     );
-    const selectedNodes = selectOverviewNodes(matchingNodes, matchingEdges);
-    const selectedNodeIds = new Set(selectedNodes.map((node) => node.id));
+    const nodeLimit = query.limit ?? DEFAULT_OVERVIEW_NODE_LIMIT;
+    const edgeLimit = Math.min(MAX_OVERVIEW_EDGE_LIMIT, nodeLimit * OVERVIEW_EDGE_MULTIPLIER);
+    const selectedNodes = selectOverviewNodes(matchingNodes, matchingEdges, nodeLimit);
+    const selectedNodeIds = selectedNodes.length === matchingNodes.length
+      ? matchingNodeIds
+      : new Set(selectedNodes.map((node) => node.id));
     const selectedEdges = matchingEdges
       .filter((edge) => selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target))
       .sort((a, b) => Number(b.type === "CONTAINS" || b.type === "DERIVED_FROM") - Number(a.type === "CONTAINS" || a.type === "DERIVED_FROM"))
-      .slice(0, 6000);
+      .slice(0, edgeLimit);
     const data = memoryGraphOverviewPayloadSchema.parse({
       version: snapshot.version,
       layoutVersion: snapshot.layoutVersion,

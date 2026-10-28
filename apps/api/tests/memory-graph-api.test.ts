@@ -434,6 +434,101 @@ describe("Memory graph API", () => {
     await app.close();
   });
 
+  it("allows the 3D view to request up to 50,000 nodes and 150,000 edges via limit while redacting labels", async () => {
+    const secretToken = ["sk", "overviewsecretvalue123456"].join("-");
+    const graphSnapshot = snapshot() as MemoryGraphSnapshot;
+    const nodes: MemoryGraphSnapshot["nodes"] = [
+      { id: "source:root", type: "SOURCE", label: "gemini.md", sourcePath: "/opt/spaceapp/docs/gemini.md", recordId: null },
+      { id: "topic:core", type: "TOPIC", label: "architecture", sourcePath: null, recordId: null }
+    ];
+    const edges: MemoryGraphSnapshot["edges"] = [];
+    for (let i = 0; i < 49_998; i++) {
+      const id = `memory:${String(i).padStart(5, "0")}`;
+      nodes.push({
+        id,
+        type: "MEMORY",
+        label: i === 0 ? `Note ${secretToken}` : `Memory node ${i}`,
+        sourcePath: "/opt/spaceapp/docs/gemini.md",
+        recordId: null
+      });
+      edges.push({ id: `edge:c:${String(i).padStart(5, "0")}`, source: "source:root", target: id, type: "CONTAINS" });
+      edges.push({
+        id: `edge:t:${String(i).padStart(5, "0")}`,
+        source: id,
+        target: "topic:core",
+        type: "TAGGED_WITH",
+        origin: "EXPLICIT_TAG",
+        confidence: 1,
+        evidence: "Explicit tag in canonical memory."
+      });
+      if (i > 0) {
+        edges.push({
+          id: `edge:s:${String(i).padStart(5, "0")}`,
+          source: id,
+          target: `memory:${String(i - 1).padStart(5, "0")}`,
+          type: "SEMANTICALLY_RELATED",
+          origin: "DETERMINISTIC_TFIDF",
+          confidence: 0.9,
+          evidence: "Shared canonical terms."
+        });
+      }
+      if (i >= 2 && i < 9) {
+        edges.push({
+          id: `edge:x:${String(i).padStart(5, "0")}`,
+          source: id,
+          target: `memory:${String(i - 2).padStart(5, "0")}`,
+          type: "SEMANTICALLY_RELATED",
+          origin: "DETERMINISTIC_TFIDF",
+          confidence: 0.85,
+          evidence: "Additional canonical term overlap."
+        });
+      }
+    }
+    graphSnapshot.nodes = nodes;
+    graphSnapshot.edges = edges;
+
+    const app = await memoryGraphApp(true, new InMemorySpaceStore(), false, undefined, { graphSnapshot });
+
+    const unauth = await app.inject({ method: "GET", url: "/api/admin/memory/graph/overview?limit=50000" });
+    expect(unauth.statusCode).toBe(401);
+
+    const defaultOverview = await app.inject({
+      method: "GET",
+      url: "/api/admin/memory/graph/overview",
+      headers: { cookie }
+    });
+    expect(defaultOverview.statusCode).toBe(200);
+    expect(defaultOverview.json().data.nodes).toHaveLength(2000);
+    expect(defaultOverview.json().data.edges).toHaveLength(6000);
+    expect(defaultOverview.json().data.truncated).toBe(true);
+
+    const t0 = performance.now();
+    const fullOverview = await app.inject({
+      method: "GET",
+      url: "/api/admin/memory/graph/overview?limit=50000",
+      headers: { cookie }
+    });
+    const elapsedMs = performance.now() - t0;
+
+    expect(fullOverview.statusCode).toBe(200);
+    expect(fullOverview.payload.length).toBeGreaterThan(1_000_000);
+    expect(elapsedMs).toBeLessThan(15_000);
+    const fullData = fullOverview.json().data;
+    expect(fullData.nodes).toHaveLength(50_000);
+    expect(fullData.edges).toHaveLength(150_000);
+    expect(fullData.truncated).toBe(false);
+    expect(fullOverview.payload).not.toContain(secretToken);
+
+    const overMax = await app.inject({
+      method: "GET",
+      url: "/api/admin/memory/graph/overview?limit=50001",
+      headers: { cookie }
+    });
+    expect(overMax.statusCode).toBe(422);
+
+    await app.close();
+  });
+
   it("serves the all-months archive and single-month filtering through the month query param", async () => {
     const graphSnapshot = snapshot() as MemoryGraphSnapshot;
     const archiveSnapshot = snapshot() as MemoryGraphSnapshot;

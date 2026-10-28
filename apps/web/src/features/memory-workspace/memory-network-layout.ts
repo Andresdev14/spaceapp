@@ -9,7 +9,9 @@ const unit = (value: string) => {
 
 /** Bounded force relaxation driven by actual edges; color never affects geometry. */
 export function layoutMemoryNetwork(nodes: MemoryGraphNode[], edges: MemoryGraphEdge[]) {
-  const ordered = [...nodes].sort((a, b) => a.id.localeCompare(b.id));
+  const ordered = nodes.length <= 2000
+    ? [...nodes].sort((a, b) => a.id.localeCompare(b.id))
+    : [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const index = new Map(ordered.map((node, i) => [node.id, i]));
   const sources = ordered.filter(node => node.type === "SOURCE");
   const root = sources.find(node => isMemoryCoreLabel(node.label)) ?? sources.find(node => isMemoryIndexLabel(node.label));
@@ -32,19 +34,24 @@ export function layoutMemoryNetwork(nodes: MemoryGraphNode[], edges: MemoryGraph
   });
   const count = points.length;
   const fx = new Float64Array(count), fy = new Float64Array(count);
-  for (let step = 0; step < 150; step++) {
+  const steps = count > 10_000 ? 30 : count > 2000 ? 60 : 150;
+  const maxPerCell = count > 2000 ? 8 : Infinity;
+  for (let step = 0; step < steps; step++) {
     fx.fill(0); fy.fill(0);
-    const grid = new Map<string, number[]>();
+    const grid = new Map<number, number[]>();
     for (let i = 0; i < count; i++) {
       const p = points[i]!;
-      const key = `${Math.floor(p.x / 25)},${Math.floor(p.y / 25)}`;
-      if (!grid.has(key)) grid.set(key, []);
-      grid.get(key)!.push(i);
+      const key = ((Math.floor(p.x / 25) & 0xffff) << 16) | (Math.floor(p.y / 25) & 0xffff);
+      let cell = grid.get(key);
+      if (!cell) { cell = []; grid.set(key, cell); }
+      if (cell.length < maxPerCell) cell.push(i);
     }
     for (let i = 0; i < count; i++) {
       const p = points[i]!, gx = Math.floor(p.x / 25), gy = Math.floor(p.y / 25);
       for (let x = gx - 1; x <= gx + 1; x++) for (let y = gy - 1; y <= gy + 1; y++) {
-        for (const j of grid.get(`${x},${y}`) ?? []) {
+        const cell = grid.get(((x & 0xffff) << 16) | (y & 0xffff));
+        if (!cell) continue;
+        for (const j of cell) {
           if (j <= i) continue;
           const q = points[j]!;
           const dx = p.x - q.x || 0.01, dy = p.y - q.y || 0.01;

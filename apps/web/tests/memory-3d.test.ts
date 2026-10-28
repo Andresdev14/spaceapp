@@ -1,5 +1,20 @@
-import { describe, expect, it } from "vitest";
-import { layoutMemoryNetwork3D, memory3DVolumeRatio, projectMemoryPoint, DEFAULT_MEMORY_CAMERA } from "../src/features/memory-workspace/memory-3d.js";
+import { createElement } from "react";
+import { act, fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import {
+  DEFAULT_MEMORY_CAMERA,
+  MAX_MEMORY_3D_LABELS,
+  buildMemory3DLabelCandidateIndices,
+  createMemory3DSpatialIndex,
+  createMemoryLayout3DStepper,
+  layoutMemoryNetwork3D,
+  memory3DVolumeRatio,
+  projectMemoryPoint,
+  selectMemory3DLabels
+} from "../src/features/memory-workspace/memory-3d.js";
+import { MemoryGraph3D } from "../src/features/memory-workspace/MemoryGraph3D.js";
+import { createMemoryAtlas } from "../src/features/memory-workspace/memory-atlas.js";
+import { createSyntheticMemoryGraph, DemoStore } from "../src/demo/DemoStore.js";
 import type { MemoryGraphNode, MemoryGraphEdge } from "@space/contracts";
 
 describe("3D memory projection", () => {
@@ -58,5 +73,139 @@ describe("3D memory projection", () => {
     const plane = Array.from({ length: 100 }, (_, i) => ({ x: i % 10, y: Math.floor(i / 10), z: i % 10 + Math.floor(i / 10) }));
     expect(memory3DVolumeRatio(plane)).toBeCloseTo(0);
     expect(layoutMemoryNetwork3D([], []).size).toBe(0);
+  });
+
+  it("streams incremental layout batches to the exact same converged coordinates as batch layout", () => {
+    const { nodes, edges } = fixture();
+    const batch = layoutMemoryNetwork3D(nodes, edges);
+    const stepper = createMemoryLayout3DStepper(nodes, edges);
+    const initialPacked = stepper.packForNodes(nodes);
+    expect(initialPacked).toHaveLength(nodes.length * 3);
+    expect(memory3DVolumeRatio(initialPacked)).toBeGreaterThan(0.35);
+
+    let batches = 0;
+    while (stepper.currentStep < stepper.totalSteps) {
+      const res = stepper.step(30);
+      batches++;
+      if (res.done) break;
+    }
+    expect(batches).toBeGreaterThan(1);
+    expect([...stepper.toMap()]).toEqual([...batch]);
+  });
+
+  it("picks hovered/clicked nodes in <= 4 ms at 50,000 nodes using the spatial index", () => {
+    const { nodes, edges } = createSyntheticMemoryGraph(50_000, 150_000);
+    expect(nodes).toHaveLength(50_000);
+    expect(edges).toHaveLength(150_000);
+
+    const stepper = createMemoryLayout3DStepper(nodes, edges);
+    const packed = stepper.packForNodes(nodes);
+    const baseSizes = new Float32Array(nodes.length);
+    for (let i = 0; i < nodes.length; i++) {
+      baseSizes[i] = nodes[i]!.type === "SOURCE" ? 4.6 : 2.1;
+    }
+
+    const index = createMemory3DSpatialIndex(nodes, packed, baseSizes, DEFAULT_MEMORY_CAMERA, 1.5, 1280, 800);
+    const rootScreen = projectMemoryPoint({ x: packed[0]!, y: packed[1]!, z: packed[2]! }, DEFAULT_MEMORY_CAMERA, 1.5, 1280, 800);
+
+    const t0 = performance.now();
+    const pickedId = index.pick(rootScreen.x, rootScreen.y);
+    const elapsedMs = performance.now() - t0;
+
+    expect(pickedId).not.toBeNull();
+    expect(elapsedMs).toBeLessThanOrEqual(4);
+    expect(index.pick(-100, -100)).toBeNull();
+  });
+
+  it("bounds measured and drawn labels per frame via LOD while preserving core and source priority", () => {
+    const { nodes, edges } = createSyntheticMemoryGraph(10_000, 30_000);
+    const stepper = createMemoryLayout3DStepper(nodes, edges);
+    const packed = stepper.packForNodes(nodes);
+    const candidates = buildMemory3DLabelCandidateIndices(nodes, edges);
+
+    const zoomedOut = selectMemory3DLabels({
+      nodes,
+      packedPositions: packed,
+      camera: DEFAULT_MEMORY_CAMERA,
+      scale: 1.5,
+      width: 1280,
+      height: 800,
+      focusId: "memory:synthetic-00042",
+      candidates
+    });
+
+    expect(zoomedOut.labels.length).toBeLessThanOrEqual(MAX_MEMORY_3D_LABELS);
+    expect(zoomedOut.measuredCount).toBeLessThanOrEqual(96);
+    expect(zoomedOut.labels[0]?.id).toBe("memory:synthetic-00042");
+    expect(zoomedOut.labels.some(l => l.isCore)).toBe(true);
+    expect(zoomedOut.labels.every(l => l.id === "memory:synthetic-00042" || l.id.startsWith("source:"))).toBe(true);
+
+    const zoomedIn = selectMemory3DLabels({
+      nodes,
+      packedPositions: packed,
+      camera: { ...DEFAULT_MEMORY_CAMERA, zoom: 2.2 },
+      scale: 1.5,
+      width: 1280,
+      height: 800,
+      focusId: null,
+      candidates
+    });
+    expect(zoomedIn.labels.length).toBeLessThanOrEqual(MAX_MEMORY_3D_LABELS);
+    expect(zoomedIn.measuredCount).toBeLessThanOrEqual(96);
+  });
+
+  it("supports deterministic synthetic graphs of 2k, 10k, and 50k nodes in DemoStore with overview limit", async () => {
+    const store = new DemoStore();
+    store.setSyntheticMemoryGraphSize(50_000);
+    const defaultCap = await store.api.memoryGraphOverview({ month: "all", relationMode: "RELATIONS" });
+    expect(defaultCap.data.nodes).toHaveLength(2000);
+    expect(defaultCap.data.edges).toHaveLength(6000);
+    expect(defaultCap.data.totalMatchingNodes).toBe(50_000);
+    expect(defaultCap.data.totalMatchingEdges).toBe(150_000);
+    expect(defaultCap.data.truncated).toBe(true);
+
+    const full3D = await store.api.memoryGraphOverview({ month: "all", relationMode: "RELATIONS", limit: 50_000 });
+    expect(full3D.data.nodes).toHaveLength(50_000);
+    expect(full3D.data.edges).toHaveLength(150_000);
+    expect(full3D.data.truncated).toBe(false);
+  });
+
+  it("preserves accessibility attributes, keyboard controls, and falls back cleanly without WebGL2 or on context loss", async () => {
+    const { nodes, edges } = fixture();
+    const atlas = createMemoryAtlas(nodes, edges, false);
+    const coordinates = layoutMemoryNetwork3D(nodes, edges);
+    const onSelectNode = vi.fn();
+    const onRendererFallbackChange = vi.fn();
+
+    const { container } = render(
+      createElement(MemoryGraph3D, {
+        nodes: atlas.nodes,
+        edges: atlas.edges,
+        positions: atlas.positions,
+        coordinates,
+        showTitles: true,
+        selectedNodeId: null,
+        onSelectNode,
+        loading: false,
+        resetToken: 0,
+        onRendererFallbackChange
+      })
+    );
+
+    const canvas = container.querySelector("canvas[role='application']") as HTMLCanvasElement;
+    expect(canvas).not.toBeNull();
+    expect(canvas.getAttribute("tabindex")).toBe("0");
+    expect(canvas.getAttribute("aria-busy")).toBe("false");
+    expect(canvas.getAttribute("data-titles-visible")).toBe("true");
+    expect(Number(canvas.getAttribute("data-layout-volume"))).toBeGreaterThan(0.35);
+    expect(onRendererFallbackChange).toHaveBeenCalledWith(true);
+
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    expect(onSelectNode).toHaveBeenCalledWith("root");
+
+    await act(async () => {
+      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    });
+    expect(onRendererFallbackChange).toHaveBeenLastCalledWith(true);
   });
 });
